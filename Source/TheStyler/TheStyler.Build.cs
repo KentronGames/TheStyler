@@ -23,6 +23,11 @@ public class TheStyler : ModuleRules
 			"BlueprintGraph",
 			"ToolMenus",
 			"MainFrame",
+			// Folder-color sync
+			"AssetTools",
+			"ContentBrowser",
+			"ToolWidgets",
+			"Json",
 		});
 	}
 }
