@@ -3,6 +3,9 @@
 #include "EdGraphUtilities.h"
 #include "Framework/Commands/UICommandList.h"
 #include "Interfaces/IMainFrameModule.h"
+#include "SActionButton.h"
+#include "Styling/AppStyle.h"
+#include "Textures/SlateIcon.h"
 #include "ToolMenus.h"
 
 #include "TheGraphArranger.h"
@@ -52,20 +55,71 @@ void FTheStylerModule::RegisterMenus()
 {
     FToolMenuOwnerScoped OwnerScoped(this);
 
-    // "GraphEditor.GraphContextMenu.Common" is the shared ancestor of every graph context menu
-    // (node right-click and empty-graph right-click), so one entry here appears everywhere.
-    UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(TEXT("GraphEditor.GraphContextMenu.Common"));
-    if(!Menu)
+    // The main-frame command list is where ArrangeNodes' action is mapped, so binding menu entries to
+    // it shows the keyboard shortcut next to the label.
+    const TSharedRef<FUICommandList> CommandList = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame")).GetMainFrameCommandBindings();
+
+    // Context-menu entry — "GraphEditor.GraphContextMenu.Common" is the shared ancestor of every graph
+    // context menu (node right-click and empty-graph right-click), so one entry here appears everywhere.
+    if(UToolMenu* ContextMenu = UToolMenus::Get()->ExtendMenu(TEXT("GraphEditor.GraphContextMenu.Common")))
+    {
+        FToolMenuSection& Section = ContextMenu->AddSection(TEXT("TheStyler"), LOCTEXT("SectionLabel", "The Styler"));
+        Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().ArrangeNodes, CommandList);
+    }
+
+    // Toolbar button — every asset editor's toolbar inherits from this shared parent, so one entry
+    // reaches all of them; a visibility gate then shows it only while the active tab hosts a graph
+    // panel, i.e. in node editors (Blueprint, dialogue, material, ...). Bound to a direct action
+    // rather than the command, since the toolbar context has no access to the main-frame command list.
+    if(UToolMenu* Toolbar = UToolMenus::Get()->ExtendMenu(TEXT("AssetEditor.DefaultToolBar")))
+    {
+        FToolUIAction Action;
+        Action.ExecuteAction = FToolMenuExecuteAction::CreateLambda([](const FToolMenuContext&) { FTheGraphArranger::ArrangeActiveGraph(); });
+        Action.IsActionVisibleDelegate = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext&) { return FTheGraphArranger::HasActiveGraph(); });
+
+        FToolMenuSection& Section = Toolbar->FindOrAddSection(TEXT("TheStyler"));
+        Section.AddEntry(FToolMenuEntry::InitToolBarButton(TEXT("TheArrangeNodes"),
+            FToolUIActionChoice(Action),
+            LOCTEXT("ArrangeToolbarLabel", "Arrange"),
+            LOCTEXT("ArrangeToolbarTooltip", "Auto-arrange the current graph's nodes — selected, or all if none selected (Shift+Q)."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("GraphEditor.StraightenConnections"))));
+    }
+
+    RegisterContentBrowserMenu();
+}
+
+void FTheStylerModule::RegisterContentBrowserMenu()
+{
+    FToolMenuOwnerScoped OwnerScoped(this);
+
+    // The "The" dropdown in the Content Browser toolbar: a shared home for The* editor commands. The menu
+    // it opens is registered empty here; features add their own entries by extending it (see
+    // TheStyler::ContentBrowserMenuName). It is generated fresh on each open, so late extensions still show.
+    if(!UToolMenus::Get()->IsMenuRegistered(TheStyler::ContentBrowserMenuName))
+    {
+        UToolMenus::Get()->RegisterMenu(TheStyler::ContentBrowserMenuName);
+    }
+
+    UToolMenu* ContentBrowserToolbar = UToolMenus::Get()->ExtendMenu(TEXT("ContentBrowser.ToolBar"));
+    if(!ContentBrowserToolbar)
     {
         return;
     }
 
-    // Bind the entry to the command via the main-frame command list (where its action is mapped)
-    // so the menu item shows its keyboard shortcut next to the label.
-    const TSharedRef<FUICommandList> CommandList = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame")).GetMainFrameCommandBindings();
+    // SActionButton in combo mode (no OnClicked, opens OnGetMenuContent) so it matches the native
+    // Content Browser toolbar buttons rather than the duller generic toolbar block.
+    const TSharedRef<SActionButton> TheButton = SNew(SActionButton)
+                                                    .Text(LOCTEXT("TheMenuLabel", "The"))
+                                                    .ToolTipText(LOCTEXT("TheMenuTooltip", "Commands from the The* plugins."))
+                                                    .Icon(FAppStyle::Get().GetBrush("Icons.Toolbar.Settings"))
+                                                    .OnGetMenuContent_Lambda([]() { return UToolMenus::Get()->GenerateWidget(TheStyler::ContentBrowserMenuName, FToolMenuContext()); });
 
-    FToolMenuSection& Section = Menu->AddSection(TEXT("TheStyler"), LOCTEXT("SectionLabel", "The Styler"));
-    Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().ArrangeNodes, CommandList);
+    FToolMenuSection& Section = ContentBrowserToolbar->FindOrAddSection(TEXT("Save"));
+    Section.AddEntry(FToolMenuEntry::InitWidget(TEXT("TheCommandsMenu"),
+        TheButton,
+        FText::GetEmpty(),
+        /*bNoIndent*/ true,
+        /*bSearchable*/ false));
 }
 
 #undef LOCTEXT_NAMESPACE

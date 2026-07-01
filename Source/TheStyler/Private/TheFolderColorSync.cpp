@@ -1,21 +1,26 @@
 #include "TheFolderColorSync.h"
 
+#include "AssetRegistry/IAssetRegistry.h"
 #include "AssetViewUtils.h"
+#include "ContentBrowserItemPath.h"
 #include "ContentBrowserModule.h"
+#include "Framework/Commands/UIAction.h"
 #include "Framework/Notifications/NotificationManager.h"
+#include "IContentBrowserSingleton.h"
 #include "HAL/FileManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/DelayedAutoRegister.h"
 #include "Misc/FileHelper.h"
 #include "Misc/PackageName.h"
-#include "SActionButton.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
 #include "Styling/AppStyle.h"
+#include "Textures/SlateIcon.h"
 #include "ToolMenus.h"
 #include "Widgets/Notifications/SNotificationList.h"
 
 #include "TheStylerModule.h"
+#include "TheStylerSettings.h"
 
 #define LOCTEXT_NAMESPACE "FTheFolderColorSync"
 
@@ -28,19 +33,24 @@ const TCHAR* const ColorField = TEXT("Color");
 const TCHAR* const PathField = TEXT("Path");
 const TCHAR* const VersionField = TEXT("Version");
 
-// Apply saved colors and add the toolbar button once the editor UI is up.
+// Apply saved colors and add the "Save Colors" menu entry once the editor UI is up.
 FDelayedAutoRegisterHelper FolderColorRegistration(
     EDelayedRegisterRunPhase::EndOfEngineInit,
     []()
     {
         FTheFolderColorSync::ApplySavedFolderColors();
-        FTheFolderColorSync::RegisterToolbarButton();
+        FTheFolderColorSync::RegisterMenuEntry();
     },
     true);
 }
 
 void FTheFolderColorSync::ApplySavedFolderColors()
 {
+    if(!GetDefault<UTheStylerSettings>()->bEnableFolderColorSync)
+    {
+        return;
+    }
+
     TMap<FString, FLinearColor> ProjectFolderColors;
     if(!LoadProjectFolderColors(ProjectFolderColors))
     {
@@ -94,41 +104,161 @@ void FTheFolderColorSync::SaveCurrentFolderColors()
     UE_LOG(LogTheStyler, Warning, TEXT("Failed to save editor folder colors to %s."), *GetFolderColorsFilePath());
 }
 
-void FTheFolderColorSync::RegisterToolbarButton()
+void FTheFolderColorSync::RainbowCurrentFolder()
+{
+    const FContentBrowserItemPath CurrentPath = IContentBrowserSingleton::Get().GetCurrentPath();
+    if(!CurrentPath.HasInternalPath())
+    {
+        Notify(LOCTEXT("RainbowNoFolder", "Open a project folder in the Content Browser first."), false);
+        return;
+    }
+    const FString BasePath = CurrentPath.GetInternalPathString();
+
+    IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
+    if(!AssetRegistry)
+    {
+        Notify(LOCTEXT("RainbowNoRegistry", "Asset registry is unavailable."), false);
+        return;
+    }
+
+    // Immediate subfolders only — do not recurse into their children.
+    TArray<FString> SubPaths;
+    AssetRegistry->GetSubPaths(BasePath, SubPaths, /*bRecurse*/ false);
+    if(SubPaths.Num() == 0)
+    {
+        Notify(LOCTEXT("RainbowNoSubfolders", "The current folder has no subfolders to color."), false);
+        return;
+    }
+
+    // Stable ordering so each folder keeps the same hue across runs.
+    SubPaths.Sort();
+
+    const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+    for(int32 FolderNdx = 0; FolderNdx < SubPaths.Num(); ++FolderNdx)
+    {
+        // Evenly spaced hues give the most visually distinct spread across the set.
+        const float Hue = 360.0f * FolderNdx / SubPaths.Num();
+        const FLinearColor Color = FLinearColor(Hue, 0.7f, 0.9f).HSVToLinearRGB();
+
+        AssetViewUtils::SetPathColor(SubPaths[FolderNdx], TOptional<FLinearColor>(Color));
+        if(ContentBrowserModule)
+        {
+            ContentBrowserModule->GetOnSetFolderColor().Broadcast(SubPaths[FolderNdx]);
+        }
+    }
+
+    GConfig->Flush(false, GEditorPerProjectIni);
+
+    // Persist to the project file exactly like "Save Colors" (it reads back the editor config we just wrote).
+    SaveCurrentFolderColors();
+}
+
+void FTheFolderColorSync::ApplyStandardFolderColors()
+{
+    IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
+    if(!AssetRegistry)
+    {
+        Notify(LOCTEXT("StandardNoRegistry", "Asset registry is unavailable."), false);
+        return;
+    }
+
+    const auto& Rules = GetDefault<UTheStylerSettings>()->StandardFolderColors;
+    if(Rules.Num() == 0)
+    {
+        Notify(LOCTEXT("StandardNoRules", "No standard folder colors are configured (Project Settings -> Plugins -> The Styler)."), false);
+        return;
+    }
+
+    // Colors are matched by folder leaf name across the whole project — a key starting with "*" matches
+    // by suffix (e.g. "*_Data"), exact names win over suffix rules.
+    const auto FindColor = [&Rules](const FString& LeafName) -> const FLinearColor*
+    {
+        for(const TPair<FString, FLinearColor>& Rule : Rules)
+        {
+            if(!Rule.Key.StartsWith(TEXT("*")) && LeafName.Equals(Rule.Key, ESearchCase::IgnoreCase))
+            {
+                return &Rule.Value;
+            }
+        }
+        for(const TPair<FString, FLinearColor>& Rule : Rules)
+        {
+            if(Rule.Key.StartsWith(TEXT("*")) && LeafName.EndsWith(Rule.Key.RightChop(1), ESearchCase::IgnoreCase))
+            {
+                return &Rule.Value;
+            }
+        }
+        return nullptr;
+    };
+
+    // Every folder under /Game, recursively — but each is matched only by its own leaf name.
+    TArray<FString> AllPaths;
+    AssetRegistry->GetSubPaths(TEXT("/Game"), AllPaths, /*bRecurse*/ true);
+
+    const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+    int32 ColoredCount = 0;
+    for(const FString& Path : AllPaths)
+    {
+        FString LeafName = Path;
+        int32 SlashNdx = INDEX_NONE;
+        if(Path.FindLastChar(TEXT('/'), SlashNdx))
+        {
+            LeafName = Path.RightChop(SlashNdx + 1);
+        }
+
+        const FLinearColor* const Color = FindColor(LeafName);
+        if(!Color)
+        {
+            continue;
+        }
+
+        AssetViewUtils::SetPathColor(Path, TOptional<FLinearColor>(*Color));
+        if(ContentBrowserModule)
+        {
+            ContentBrowserModule->GetOnSetFolderColor().Broadcast(Path);
+        }
+        ++ColoredCount;
+    }
+
+    if(ColoredCount == 0)
+    {
+        Notify(LOCTEXT("StandardNoMatches", "No folders matched the standard color rules."), false);
+        return;
+    }
+
+    GConfig->Flush(false, GEditorPerProjectIni);
+
+    // Persist to the project file exactly like "Save Colors" (it reads back the editor config we just wrote).
+    SaveCurrentFolderColors();
+}
+
+void FTheFolderColorSync::RegisterMenuEntry()
 {
     FToolMenuOwnerScoped OwnerScoped(TEXT("TheStyler"));
 
-    auto AddSaveFolderColorsButton = [](UToolMenu* ToolMenu, const FName SectionName, const FName EntryName)
+    // Add "Save Colors" to the shared "The" dropdown in the Content Browser toolbar (owned by the
+    // TheStyler module). Extending by name keeps this feature decoupled from the button's registration.
+    UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(TheStyler::ContentBrowserMenuName);
+    if(!Menu)
     {
-        if(!ToolMenu)
-        {
-            return;
-        }
+        return;
+    }
 
-        // Build the entry as an SActionButton so it matches the native Content Browser toolbar
-        // buttons ("Save All", "Add", ...). A plain InitToolBarButton uses the generic toolbar
-        // button block, which renders with different padding/colour and looks out of place here.
-        const TSharedRef<SActionButton> SaveButton = SNew(SActionButton)
-                                                         .ToolTipText(LOCTEXT("SaveFolderColorsTooltip", "Save Content Browser folder colors to the project file."))
-                                                         .OnClicked_Lambda(
-                                                             []()
-                                                             {
-                                                                 FTheFolderColorSync::SaveCurrentFolderColors();
-                                                                 return FReply::Handled();
-                                                             })
-                                                         .Icon(FAppStyle::Get().GetBrush("Icons.Save"))
-                                                         .Text(LOCTEXT("SaveFolderColorsLabel", "Save Colors"));
-
-        auto& Section = ToolMenu->FindOrAddSection(SectionName);
-        Section.AddEntry(FToolMenuEntry::InitWidget(EntryName,
-            SaveButton,
-            FText::GetEmpty(),
-            /*bNoIndent*/ true,
-            /*bSearchable*/ false));
-    };
-
-    // Content Browser toolbar only — the level-editor top toolbar keeps just the Run button.
-    AddSaveFolderColorsButton(UToolMenus::Get()->ExtendMenu(TEXT("ContentBrowser.ToolBar")), TEXT("Save"), TEXT("TheSaveFolderColors"));
+    FToolMenuSection& Section = Menu->FindOrAddSection(TEXT("FolderColors"));
+    Section.AddMenuEntry(TEXT("TheSaveFolderColors"),
+        LOCTEXT("SaveFolderColorsLabel", "Save Colors"),
+        LOCTEXT("SaveFolderColorsTooltip", "Save Content Browser folder colors to the project file."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Save")),
+        FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::SaveCurrentFolderColors)));
+    Section.AddMenuEntry(TEXT("TheRainbowFolderColors"),
+        LOCTEXT("RainbowFolderColorsLabel", "Rainbow Colors"),
+        LOCTEXT("RainbowFolderColorsTooltip", "Color each subfolder of the current Content Browser folder a distinct hue and save them (this level only, not recursive)."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Adjust")),
+        FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::RainbowCurrentFolder)));
+    Section.AddMenuEntry(TEXT("TheStandardFolderColors"),
+        LOCTEXT("StandardFolderColorsLabel", "Standard Colors"),
+        LOCTEXT("StandardFolderColorsTooltip", "Color known structural folders (Meshes, Materials, *_Data, Textures, FX, ...) project-wide using the colors from Project Settings, and save them."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ContentBrowser.AssetTreeFolderClosed")),
+        FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::ApplyStandardFolderColors)));
 }
 
 FString FTheFolderColorSync::GetFolderColorsFilePath()

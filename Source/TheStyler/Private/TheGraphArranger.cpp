@@ -11,16 +11,12 @@
 #include "SGraphPanel.h"
 
 #include "TheStylerModule.h"
+#include "TheStylerSettings.h"
 
 #define LOCTEXT_NAMESPACE "TheStyler"
 
 namespace
 {
-// Layout tuning (graph units). Kept as constants — the plugin is intentionally config-free.
-constexpr double SpacingX = 100.0; // horizontal gap between layers (columns)
-constexpr double SpacingY = 32.0; // vertical gap between stacked nodes in a column
-constexpr int32 NumOrderingPasses = 4;
-
 // Default node extent used when a node's widget size is not available yet.
 constexpr double DefaultNodeWidth = 200.0;
 constexpr double DefaultNodeHeight = 128.0;
@@ -73,6 +69,11 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
     return FindGraphPanelRecursive(ActiveTab->GetContent());
 }
 
+bool FTheGraphArranger::HasActiveGraph()
+{
+    return FindActiveGraphPanel().IsValid();
+}
+
 #pragma endregion
 
 #pragma region Arrange
@@ -92,6 +93,12 @@ void FTheGraphArranger::ArrangeActiveGraph()
         UE_LOG(LogTheStyler, Verbose, TEXT("Arrange Nodes: active graph panel has no valid graph object."));
         return;
     }
+
+    // Layout tuning is user-configurable (Project Settings -> Plugins -> The Styler).
+    const auto& Settings = *GetDefault<UTheStylerSettings>();
+    const double SpacingX = Settings.NodeSpacingX; // horizontal gap between layers (columns)
+    const double SpacingY = Settings.NodeSpacingY; // vertical gap between stacked nodes in a column
+    const int32 NumOrderingPasses = Settings.NodeOrderingPasses;
 
     // Collect the target set: selected nodes, or all nodes if nothing is selected.
     // Comment nodes are left untouched in this version.

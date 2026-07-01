@@ -15,6 +15,7 @@ public class TheStyler : ModuleRules
 		{
 			"CoreUObject",
 			"Engine",
+			"DeveloperSettings",
 			"Slate",
 			"SlateCore",
 			"InputCore",
@@ -25,7 +26,9 @@ public class TheStyler : ModuleRules
 			"MainFrame",
 			// Folder-color sync
 			"AssetTools",
+			"AssetRegistry",
 			"ContentBrowser",
+			"ContentBrowserData",
 			"ToolWidgets",
 			"Json",
 		});

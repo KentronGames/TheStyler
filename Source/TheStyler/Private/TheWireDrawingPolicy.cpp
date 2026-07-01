@@ -6,13 +6,10 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/AppStyle.h"
 
+#include "TheStylerSettings.h"
+
 namespace
 {
-// Layout tuning (graph units, pre-zoom). Kept as constants — the styler is intentionally config-free.
-constexpr float CornerRadius = 12.0f; // rounded-corner radius at each Manhattan bend
-constexpr float MinManhattanDistance = 24.0f; // below this, draw a plain straight line
-constexpr float WireThicknessScale = 1.6f; // fatten every wire a touch for readability
-
 // Cubic tangent length factor for an ~circular 90-degree corner.
 const float CornerTangentFactor = 4.0f * (FMath::Sqrt(2.0f) - 1.0f);
 
@@ -46,6 +43,11 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
     FSlateWindowElementList& InDrawElements,
     UEdGraph* InGraphObj) const
 {
+    if(!GetDefault<UTheStylerSettings>()->bEnableWireStyling)
+    {
+        return nullptr; // styling disabled -> engine default policy for every graph
+    }
+
     // Blueprint (K2) graphs, and our dialogue graph — its nodes use PC_Exec pins laid out
     // horizontally, so the same exec-Manhattan path applies. Matched by schema class name to keep
     // this plugin decoupled from the project's editor module.
@@ -84,10 +86,11 @@ void FTheWireConnectionDrawingPolicy::DrawExecBubbles(int32 LayerId, TArrayView<
         return;
     }
 
-    // Match the engine's exec-bubble cadence so restyled wires animate like native ones.
-    const float BubbleSpacing = 64.0f * ZoomFactor;
-    const float BubbleSpeed = 192.0f * ZoomFactor;
-    const FVector2f BubbleSize = BubbleImage->ImageSize * ZoomFactor * 0.2f * WireThickness;
+    // Cadence and size come from the plugin settings (defaults match the engine's native exec bubbles).
+    const auto& StylerSettings = *GetDefault<UTheStylerSettings>();
+    const float BubbleSpacing = StylerSettings.BubbleSpacing * ZoomFactor;
+    const float BubbleSpeed = StylerSettings.BubbleSpeed * ZoomFactor;
+    const FVector2f BubbleSize = BubbleImage->ImageSize * ZoomFactor * StylerSettings.BubbleSizeScale * WireThickness;
 
     const float Time = static_cast<float>(FPlatformTime::Seconds() - GStartTime);
     const float StartOffset = FMath::Fmod(Time * BubbleSpeed, BubbleSpacing);
@@ -134,9 +137,11 @@ void FTheWireConnectionDrawingPolicy::AccumulateClosestPoint(const FVector2f& A,
 
 void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVector2f& Start, const FVector2f& End, const FConnectionParams& Params)
 {
+    const auto& StylerSettings = *GetDefault<UTheStylerSettings>();
+
     // Fatten every wire a little for readability (data wires included — the base policy draws them).
     FConnectionParams StyledParams = Params;
-    StyledParams.WireThickness *= WireThicknessScale;
+    StyledParams.WireThickness *= StylerSettings.WireThicknessScale;
 
     const FVector2f EndDirection = (StyledParams.EndDirection == EGPD_Input) ? FVector2f(1.0f, 0.0f) : FVector2f(-1.0f, 0.0f);
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
@@ -150,9 +155,17 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         return;
     }
 
+    // Optional fixed exec-wire colour; otherwise keep the pin-type colour. Bubbles follow the wire
+    // colour unless they have their own override.
+    if(StylerSettings.bOverrideWireColor)
+    {
+        StyledParams.WireColor = StylerSettings.WireColor;
+    }
+    const FLinearColor BubbleColor = StylerSettings.bOverrideBubbleColor ? StylerSettings.BubbleColor : StyledParams.WireColor;
+
     ClosestDistanceSquared = FLT_MAX;
 
-    if(FVector2f::Distance(Start, End) < MinManhattanDistance * ZoomFactor)
+    if(FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
     {
         // Short link: a tiny elbow looks bad — draw it straight.
         DrawStraightWire(LayerId, Start, End, StyledParams);
@@ -167,7 +180,7 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         Points.Add(FVector2f(MidX, End.Y));
         Points.Add(End);
 
-        const float Radius = CornerRadius * ZoomFactor;
+        const float Radius = StylerSettings.CornerRadius * ZoomFactor;
 
         FVector2f Cursor = Points[0];
         for(int32 Ndx = 1; Ndx < Points.Num() - 1; ++Ndx)
@@ -200,11 +213,17 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         DrawStraightWire(LayerId, Cursor, Points.Last(), StyledParams);
 
         // Animated flow dots along the exec path.
-        DrawExecBubbles(LayerId, Points, StyledParams.WireThickness, StyledParams.WireColor);
+        if(StylerSettings.bShowExecBubbles)
+        {
+            DrawExecBubbles(LayerId, Points, StyledParams.WireThickness, BubbleColor);
+        }
     }
 
     // Direction arrowhead near the input pin.
-    DrawDirectionArrow(LayerId, End, EndDirection, StyledParams.WireColor);
+    if(StylerSettings.bShowDirectionArrow)
+    {
+        DrawDirectionArrow(LayerId, End, EndDirection, StyledParams.WireColor);
+    }
 
     // Preserve wire hover/selection: report the closest point on the drawn path (mirrors the base policy).
     if(Settings->bTreatSplinesLikePins)
