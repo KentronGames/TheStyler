@@ -13,6 +13,7 @@
 #include "ToolMenuContext.h"
 #include "Toolkits/AssetEditorToolkit.h"
 #include "Toolkits/AssetEditorToolkitMenuContext.h"
+#include "Toolkits/IToolkitHost.h"
 #include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SWindow.h"
 
@@ -135,17 +136,27 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMe
     {
         return nullptr;
     }
-    const auto TabManager = Toolkit->GetTabManager();
-    if(!TabManager.IsValid())
+    // The toolkit's owner tab spans its docked tabs — covers editors whose graph is a major/panel tab
+    // (Blueprint event graph, our Dialogue graph).
+    if(const auto TabManager = Toolkit->GetTabManager())
     {
-        return nullptr;
+        if(const auto OwnerTab = TabManager->GetOwnerTab())
+        {
+            if(const auto Panel = FindGraphPanelRecursive(OwnerTab->GetContent()))
+            {
+                return Panel;
+            }
+        }
     }
-    const auto OwnerTab = TabManager->GetOwnerTab();
-    if(!OwnerTab.IsValid())
+
+    // Fallback: the toolkit host's whole widget tree — reaches a graph hosted in a Document tab that the
+    // owner-tab content does not expose (the Material editor lays its graph out this way).
+    if(const auto Panel = FindGraphPanelRecursive(Toolkit->GetToolkitHost()->GetParentWidget()))
     {
-        return nullptr;
+        return Panel;
     }
-    return FindGraphPanelRecursive(OwnerTab->GetContent());
+
+    return nullptr;
 }
 
 bool FTheGraphArranger::HasGraphInContext(const FToolMenuContext& Context)
@@ -169,7 +180,14 @@ void FTheGraphArranger::FormatActiveSelection()
 
 void FTheGraphArranger::ArrangeGraphFromContext(const FToolMenuContext& Context)
 {
-    ArrangeGraphPanel(FindGraphPanelInContext(Context), EArrangeScope::SelectedOrAll);
+    // Prefer the button's own editor (context); fall back to the focused/active graph so a click still
+    // works in editors whose graph the context lookup can't reach.
+    auto Panel = FindGraphPanelInContext(Context);
+    if(!Panel.IsValid())
+    {
+        Panel = FindActiveGraphPanel();
+    }
+    ArrangeGraphPanel(Panel, EArrangeScope::SelectedOrAll);
 }
 
 void FTheGraphArranger::GatherConnectedComponent(const TSet<UEdGraphNode*>& Seeds, TSet<UEdGraphNode*>& OutComponent)
