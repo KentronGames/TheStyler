@@ -24,6 +24,7 @@ public class TheStyler : ModuleRules
 			"BlueprintGraph",
 			"ToolMenus",
 			"MainFrame",
+			"MessageLog",
 			// Folder-color sync
 			"AssetTools",
 			"AssetRegistry",
