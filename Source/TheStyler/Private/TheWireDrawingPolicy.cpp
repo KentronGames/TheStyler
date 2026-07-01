@@ -46,11 +46,15 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
     FSlateWindowElementList& InDrawElements,
     UEdGraph* InGraphObj) const
 {
-    if(Schema && Schema->IsA(UEdGraphSchema_K2::StaticClass()))
+    // Blueprint (K2) graphs, and our dialogue graph — its nodes use PC_Exec pins laid out
+    // horizontally, so the same exec-Manhattan path applies. Matched by schema class name to keep
+    // this plugin decoupled from the project's editor module.
+    const bool bDialogueGraph = Schema && Schema->GetClass()->GetFName() == TEXT("TheDialogueGraphSchema");
+    if(Schema && (Schema->IsA(UEdGraphSchema_K2::StaticClass()) || bDialogueGraph))
     {
         return new FTheWireConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements, InGraphObj);
     }
-    return nullptr; // non-Blueprint graphs fall back to the engine default policy
+    return nullptr; // other graphs fall back to the engine default policy
 }
 
 void FTheWireConnectionDrawingPolicy::DrawStraightWire(int32 LayerId, const FVector2f& A, const FVector2f& B, const FConnectionParams& Params)

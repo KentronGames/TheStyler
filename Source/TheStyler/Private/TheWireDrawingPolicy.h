@@ -4,7 +4,7 @@
 #include "BlueprintConnectionDrawingPolicy.h"
 #include "EdGraphUtilities.h"
 
-/** Installs the Manhattan wire policy for Blueprint (K2) graphs; other graphs keep the engine default. */
+/** Installs the Manhattan wire policy for Blueprint (K2) and dialogue graphs; other graphs keep the engine default. */
 struct FTheWireConnectionFactory : public FGraphPanelPinConnectionFactory
 {
     virtual ~FTheWireConnectionFactory() override = default;
