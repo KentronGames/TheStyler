@@ -1,0 +1,22 @@
+{
+	"FileVersion": 3,
+	"Version": 1,
+	"VersionName": "1.0",
+	"FriendlyName": "The Styler",
+	"Description": "Graph editor tweaks: auto-arranges nodes with a single command (Shift+Q), and restyles Blueprint graph wires as rounded right-angle (Manhattan) lines.",
+	"Category": "Editor",
+	"CreatedBy": "TheGame",
+	"CanContainContent": false,
+	"Installed": false,
+	"EngineVersion": "5.8.0",
+	"Modules": [
+		{
+			"Name": "TheStyler",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit",
+			"PlatformAllowList": [
+				"Win64"
+			]
+		}
+	]
+}
