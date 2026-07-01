@@ -17,5 +17,6 @@ public:
 
 private:
     static TSharedPtr<SGraphPanel> FindActiveGraphPanel();
+    static TSharedPtr<SGraphPanel> FindGraphPanelFromFocus();
     static TSharedPtr<SGraphPanel> FindGraphPanelRecursive(const TSharedRef<SWidget>& Widget);
 };

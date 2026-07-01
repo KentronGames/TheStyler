@@ -5,10 +5,12 @@
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraphNode_Comment.h"
 #include "Editor.h"
+#include "Framework/Application/SlateApplication.h"
 #include "Framework/Docking/TabManager.h"
 #include "ScopedTransaction.h"
 #include "SGraphNode.h"
 #include "SGraphPanel.h"
+#include "Widgets/SWindow.h"
 
 #include "TheStylerModule.h"
 #include "TheStylerSettings.h"
@@ -59,14 +61,58 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelRecursive(const TShared
     return nullptr;
 }
 
-TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
+TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelFromFocus()
 {
-    const auto ActiveTab = FGlobalTabmanager::Get()->GetActiveTab();
-    if(!ActiveTab.IsValid())
+    if(!FSlateApplication::IsInitialized())
     {
         return nullptr;
     }
-    return FindGraphPanelRecursive(ActiveTab->GetContent());
+
+    // Walk up from the keyboard-focused widget. When the user is working inside a graph (e.g. the
+    // Shift+Q hotkey) this pins down the exact panel and disambiguates between several open graphs.
+    auto Widget = FSlateApplication::Get().GetKeyboardFocusedWidget();
+    while(Widget.IsValid())
+    {
+        if(Widget->GetType() == TEXT("SGraphPanel"))
+        {
+            return StaticCastSharedRef<SGraphPanel>(Widget.ToSharedRef());
+        }
+        Widget = Widget->GetParentWidget();
+    }
+    return nullptr;
+}
+
+TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
+{
+    // 1) The graph under keyboard focus — exact when the user is inside a graph.
+    if(const auto Focused = FindGraphPanelFromFocus())
+    {
+        return Focused;
+    }
+
+    // 2) The globally active tab's content — covers editors whose graph lives directly in the active
+    //    document tab, e.g. the Blueprint event graph.
+    if(const auto ActiveTab = FGlobalTabmanager::Get()->GetActiveTab())
+    {
+        if(const auto Panel = FindGraphPanelRecursive(ActiveTab->GetContent()))
+        {
+            return Panel;
+        }
+    }
+
+    // 3) The active top-level window's whole widget tree — covers editors that dock the graph in a
+    //    fixed minor tab GetActiveTab() does not return (the Material editor, our Dialogue editor).
+    //    Only the foreground major tab's content is live in the tree, so this resolves to the visible
+    //    graph rather than a backgrounded one.
+    if(FSlateApplication::IsInitialized())
+    {
+        if(const auto ActiveWindow = FSlateApplication::Get().GetActiveTopLevelWindow())
+        {
+            return FindGraphPanelRecursive(ActiveWindow.ToSharedRef());
+        }
+    }
+
+    return nullptr;
 }
 
 bool FTheGraphArranger::HasActiveGraph()
