@@ -11,4 +11,5 @@ public:
     virtual void RegisterCommands() override;
 
     TSharedPtr<FUICommandInfo> ArrangeNodes;
+    TSharedPtr<FUICommandInfo> FormatNode;
 };

@@ -159,15 +159,52 @@ bool FTheGraphArranger::HasGraphInContext(const FToolMenuContext& Context)
 
 void FTheGraphArranger::ArrangeActiveGraph()
 {
-    ArrangeGraphPanel(FindActiveGraphPanel());
+    ArrangeGraphPanel(FindActiveGraphPanel(), EArrangeScope::SelectedOrAll);
+}
+
+void FTheGraphArranger::FormatActiveSelection()
+{
+    ArrangeGraphPanel(FindActiveGraphPanel(), EArrangeScope::ConnectedComponentOfSelection);
 }
 
 void FTheGraphArranger::ArrangeGraphFromContext(const FToolMenuContext& Context)
 {
-    ArrangeGraphPanel(FindGraphPanelInContext(Context));
+    ArrangeGraphPanel(FindGraphPanelInContext(Context), EArrangeScope::SelectedOrAll);
 }
 
-void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel)
+void FTheGraphArranger::GatherConnectedComponent(const TSet<UEdGraphNode*>& Seeds, TSet<UEdGraphNode*>& OutComponent)
+{
+    OutComponent.Append(Seeds);
+
+    TArray<UEdGraphNode*> Queue = Seeds.Array();
+    while(Queue.Num() > 0)
+    {
+        const auto Node = Queue.Pop();
+        for(UEdGraphPin* Pin : Node->Pins)
+        {
+            if(!Pin)
+            {
+                continue;
+            }
+            for(UEdGraphPin* Linked : Pin->LinkedTo)
+            {
+                const auto Other = Linked ? Linked->GetOwningNodeUnchecked() : nullptr;
+                if(!Other || Other->IsA<UEdGraphNode_Comment>())
+                {
+                    continue;
+                }
+                bool bAlreadyInSet = false;
+                OutComponent.Add(Other, &bAlreadyInSet);
+                if(!bAlreadyInSet)
+                {
+                    Queue.Add(Other);
+                }
+            }
+        }
+    }
+}
+
+void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel, EArrangeScope Scope)
 {
     if(!GraphPanel.IsValid())
     {
@@ -188,9 +225,29 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
     const double SpacingY = Settings.NodeSpacingY; // vertical gap between stacked nodes in a column
     const int32 NumOrderingPasses = Settings.NodeOrderingPasses;
 
-    // Collect the target set: selected nodes, or all nodes if nothing is selected.
-    // Comment nodes are left untouched in this version.
+    // Collect the target set. Comment nodes are left untouched in this version.
+    //   SelectedOrAll  : selected nodes, or all if nothing is selected.
+    //   ConnectedComponentOfSelection (Format Node) : the wire-connected component(s) of the selection.
     const bool bHasSelection = GraphPanel->SelectionManager.SelectedNodes.Num() > 0;
+
+    TSet<UEdGraphNode*> Component;
+    if(Scope == EArrangeScope::ConnectedComponentOfSelection)
+    {
+        TSet<UEdGraphNode*> Seeds;
+        for(UEdGraphNode* GraphNode : Graph->Nodes)
+        {
+            if(IsValid(GraphNode) && !GraphNode->IsA<UEdGraphNode_Comment>() && GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
+            {
+                Seeds.Add(GraphNode);
+            }
+        }
+        if(Seeds.Num() == 0)
+        {
+            UE_LOG(LogTheStyler, Verbose, TEXT("Format Node: select a node first."));
+            return;
+        }
+        GatherConnectedComponent(Seeds, Component);
+    }
 
     TArray<FArrangeNode> Nodes;
     TMap<UEdGraphNode*, int32> IndexMap;
@@ -200,7 +257,14 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         {
             continue;
         }
-        if(bHasSelection && !GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
+        if(Scope == EArrangeScope::ConnectedComponentOfSelection)
+        {
+            if(!Component.Contains(GraphNode))
+            {
+                continue;
+            }
+        }
+        else if(bHasSelection && !GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
         {
             continue;
         }

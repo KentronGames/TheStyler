@@ -23,6 +23,7 @@ void FTheStylerModule::StartupModule()
     // Global hotkey via the main-frame command bindings (fires while a graph editor is focused).
     IMainFrameModule& MainFrame = FModuleManager::LoadModuleChecked<IMainFrameModule>(TEXT("MainFrame"));
     MainFrame.GetMainFrameCommandBindings()->MapAction(FTheStylerCommands::Get().ArrangeNodes, FExecuteAction::CreateStatic(&FTheGraphArranger::ArrangeActiveGraph));
+    MainFrame.GetMainFrameCommandBindings()->MapAction(FTheStylerCommands::Get().FormatNode, FExecuteAction::CreateStatic(&FTheGraphArranger::FormatActiveSelection));
 
     // Context-menu entry — registered once the tool-menu system is ready.
     UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FTheStylerModule::RegisterMenus));
@@ -46,6 +47,7 @@ void FTheStylerModule::ShutdownModule()
     if(IMainFrameModule* MainFrame = FModuleManager::GetModulePtr<IMainFrameModule>(TEXT("MainFrame")))
     {
         MainFrame->GetMainFrameCommandBindings()->UnmapAction(FTheStylerCommands::Get().ArrangeNodes);
+        MainFrame->GetMainFrameCommandBindings()->UnmapAction(FTheStylerCommands::Get().FormatNode);
     }
 
     FTheStylerCommands::Unregister();
@@ -65,6 +67,7 @@ void FTheStylerModule::RegisterMenus()
     {
         FToolMenuSection& Section = ContextMenu->AddSection(TEXT("TheStyler"), LOCTEXT("SectionLabel", "The Styler"));
         Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().ArrangeNodes, CommandList);
+        Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().FormatNode, CommandList);
     }
 
     // Toolbar button — every asset editor's toolbar inherits from this shared parent, so one entry

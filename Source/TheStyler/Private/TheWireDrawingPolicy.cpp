@@ -146,10 +146,11 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
     const FVector2f EndDirection = (StyledParams.EndDirection == EGPD_Input) ? FVector2f(1.0f, 0.0f) : FVector2f(-1.0f, 0.0f);
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
 
-    // Only exec wires get the Manhattan restyle. Data wires (usually many and crossing) keep the
-    // engine's default spline to avoid clutter. Backward exec wires also fall back, since a mid-X
-    // elbow would route back over the source node.
-    if(!bExecWire || End.X <= Start.X)
+    // Exec wires always get the Manhattan restyle; data wires (usually many and crossing) only when the
+    // user opts in, and even then they keep their pin-type colour and get no exec-flow visuals below.
+    // Backward wires fall back to the spline, since a mid-X elbow would route back over the source node.
+    const bool bManhattan = bExecWire || StylerSettings.bManhattanDataWires;
+    if(!bManhattan || End.X <= Start.X)
     {
         FKismetConnectionDrawingPolicy::DrawConnection(LayerId, Start, End, StyledParams);
         return;
@@ -157,7 +158,7 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
     // Optional fixed exec-wire colour; otherwise keep the pin-type colour. Bubbles follow the wire
     // colour unless they have their own override.
-    if(StylerSettings.bOverrideWireColor)
+    if(bExecWire && StylerSettings.bOverrideWireColor)
     {
         StyledParams.WireColor = StylerSettings.WireColor;
     }
@@ -213,14 +214,14 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         DrawStraightWire(LayerId, Cursor, Points.Last(), StyledParams);
 
         // Animated flow dots along the exec path.
-        if(StylerSettings.bShowExecBubbles)
+        if(bExecWire && StylerSettings.bShowExecBubbles)
         {
             DrawExecBubbles(LayerId, Points, StyledParams.WireThickness, BubbleColor);
         }
     }
 
-    // Direction arrowhead near the input pin.
-    if(StylerSettings.bShowDirectionArrow)
+    // Direction arrowhead near the input pin (exec flow only).
+    if(bExecWire && StylerSettings.bShowDirectionArrow)
     {
         DrawDirectionArrow(LayerId, End, EndDirection, StyledParams.WireColor);
     }

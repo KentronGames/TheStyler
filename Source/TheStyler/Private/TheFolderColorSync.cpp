@@ -40,6 +40,7 @@ FDelayedAutoRegisterHelper FolderColorRegistration(
     {
         FTheFolderColorSync::ApplySavedFolderColors();
         FTheFolderColorSync::RegisterMenuEntry();
+        FTheFolderColorSync::RegisterAutoColorHandler();
     },
     true);
 }
@@ -169,28 +170,7 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
         return;
     }
 
-    // Colors are matched by folder leaf name across the whole project — a key starting with "*" matches
-    // by suffix (e.g. "*_Data"), exact names win over suffix rules.
-    const auto FindColor = [&Rules](const FString& LeafName) -> const FLinearColor*
-    {
-        for(const TPair<FString, FLinearColor>& Rule : Rules)
-        {
-            if(!Rule.Key.StartsWith(TEXT("*")) && LeafName.Equals(Rule.Key, ESearchCase::IgnoreCase))
-            {
-                return &Rule.Value;
-            }
-        }
-        for(const TPair<FString, FLinearColor>& Rule : Rules)
-        {
-            if(Rule.Key.StartsWith(TEXT("*")) && LeafName.EndsWith(Rule.Key.RightChop(1), ESearchCase::IgnoreCase))
-            {
-                return &Rule.Value;
-            }
-        }
-        return nullptr;
-    };
-
-    // Every folder under /Game, recursively — but each is matched only by its own leaf name.
+    // Every folder under /Game, recursively — each matched by its own leaf name (see FindStandardColorForPath).
     TArray<FString> AllPaths;
     AssetRegistry->GetSubPaths(TEXT("/Game"), AllPaths, /*bRecurse*/ true);
 
@@ -198,20 +178,13 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
     int32 ColoredCount = 0;
     for(const FString& Path : AllPaths)
     {
-        FString LeafName = Path;
-        int32 SlashNdx = INDEX_NONE;
-        if(Path.FindLastChar(TEXT('/'), SlashNdx))
-        {
-            LeafName = Path.RightChop(SlashNdx + 1);
-        }
-
-        const FLinearColor* const Color = FindColor(LeafName);
-        if(!Color)
+        FLinearColor Color;
+        if(!FindStandardColorForPath(Path, Color))
         {
             continue;
         }
 
-        AssetViewUtils::SetPathColor(Path, TOptional<FLinearColor>(*Color));
+        AssetViewUtils::SetPathColor(Path, TOptional<FLinearColor>(Color));
         if(ContentBrowserModule)
         {
             ContentBrowserModule->GetOnSetFolderColor().Broadcast(Path);
@@ -229,6 +202,75 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
 
     // Persist to the project file exactly like "Save Colors" (it reads back the editor config we just wrote).
     SaveCurrentFolderColors();
+}
+
+bool FTheFolderColorSync::FindStandardColorForPath(const FString& Path, FLinearColor& OutColor)
+{
+    // Match by folder leaf name: an exact rule wins over a "*"-prefixed suffix rule (e.g. "*_Data").
+    FString LeafName = Path;
+    int32 SlashNdx = INDEX_NONE;
+    if(Path.FindLastChar(TEXT('/'), SlashNdx))
+    {
+        LeafName = Path.RightChop(SlashNdx + 1);
+    }
+
+    const auto& Rules = GetDefault<UTheStylerSettings>()->StandardFolderColors;
+    for(const TPair<FString, FLinearColor>& Rule : Rules)
+    {
+        if(!Rule.Key.StartsWith(TEXT("*")) && LeafName.Equals(Rule.Key, ESearchCase::IgnoreCase))
+        {
+            OutColor = Rule.Value;
+            return true;
+        }
+    }
+    for(const TPair<FString, FLinearColor>& Rule : Rules)
+    {
+        if(Rule.Key.StartsWith(TEXT("*")) && LeafName.EndsWith(Rule.Key.RightChop(1), ESearchCase::IgnoreCase))
+        {
+            OutColor = Rule.Value;
+            return true;
+        }
+    }
+    return false;
+}
+
+void FTheFolderColorSync::RegisterAutoColorHandler()
+{
+    if(IAssetRegistry* const AssetRegistry = IAssetRegistry::Get())
+    {
+        AssetRegistry->OnPathAdded().AddStatic(&FTheFolderColorSync::HandlePathAdded);
+    }
+}
+
+void FTheFolderColorSync::HandlePathAdded(const FString& Path)
+{
+    const auto& Settings = *GetDefault<UTheStylerSettings>();
+    if(!Settings.bEnableFolderColorSync || !Settings.bAutoColorNewFolders)
+    {
+        return;
+    }
+
+    // Ignore the flood of paths surfaced during the initial asset-registry scan — colour only folders
+    // the user creates once the editor is up and running.
+    IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
+    if(!AssetRegistry || AssetRegistry->IsLoadingAssets())
+    {
+        return;
+    }
+
+    FLinearColor Color;
+    if(!FindStandardColorForPath(Path, Color))
+    {
+        return;
+    }
+
+    AssetViewUtils::SetPathColor(Path, TOptional<FLinearColor>(Color));
+    if(const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser")))
+    {
+        ContentBrowserModule->GetOnSetFolderColor().Broadcast(Path);
+    }
+    GConfig->Flush(false, GEditorPerProjectIni);
+    UE_LOG(LogTheStyler, Verbose, TEXT("Auto-colored new folder %s."), *Path);
 }
 
 void FTheFolderColorSync::RegisterMenuEntry()

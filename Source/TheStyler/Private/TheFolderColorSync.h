@@ -15,7 +15,12 @@ public:
     static void ApplyStandardFolderColors();
     static void RegisterMenuEntry();
 
+    /** Listen for new folders and paint them their Standard Color as they appear (opt-in setting). */
+    static void RegisterAutoColorHandler();
+
 private:
+    static void HandlePathAdded(const FString& Path);
+    static bool FindStandardColorForPath(const FString& Path, FLinearColor& OutColor);
     static FString GetFolderColorsFilePath();
     static TMap<FString, FLinearColor> LoadEditorConfigFolderColors();
     static int32 PruneMissingFolders(TMap<FString, FLinearColor>& FolderColors);

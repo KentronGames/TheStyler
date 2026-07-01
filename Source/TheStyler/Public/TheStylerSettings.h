@@ -34,11 +34,20 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "The")
     TMap<FString, FLinearColor> StandardFolderColors;
 
+    /** Auto-apply the matching Standard Color to a folder the moment it is created (matched by leaf name). */
+    UPROPERTY(config, EditAnywhere, Category = "The")
+    bool bAutoColorNewFolders = true;
+
 #pragma region Wires
 
     /** Master switch for the right-angle (Manhattan) restyle of exec wires. Off = engine default wires. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires")
     bool bEnableWireStyling = true;
+
+    /** Also route data wires Manhattan-style. Off (default) = data wires keep the engine spline; they
+     * never get flow dots, the arrowhead or the exec color override — only the right-angle routing. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
+    bool bManhattanDataWires = false;
 
     /** Multiplier on every wire's thickness (data wires included) for readability. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (ClampMin = "0.1", UIMin = "0.5", UIMax = "4.0", EditCondition = "bEnableWireStyling"))
