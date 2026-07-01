@@ -2,7 +2,9 @@
 
 #include "AssetRegistry/AssetData.h"
 #include "AssetRegistry/IAssetRegistry.h"
+#include "AssetToolsModule.h"
 #include "Framework/Commands/UIAction.h"
+#include "IAssetTools.h"
 #include "Framework/Notifications/NotificationManager.h"
 #include "Logging/MessageLog.h"
 #include "Logging/TokenizedMessage.h"
@@ -124,8 +126,9 @@ bool FTheAssetLinter::ExpectedPrefixFor(const FAssetData& Asset, FString& OutPre
     return false;
 }
 
-void FTheAssetLinter::CheckAssetNaming()
+void FTheAssetLinter::GatherViolations(TArray<FViolation>& OutViolations, int32& OutChecked)
 {
+    OutChecked = 0;
     IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
     if(!AssetRegistry)
     {
@@ -135,53 +138,55 @@ void FTheAssetLinter::CheckAssetNaming()
     TArray<FAssetData> Assets;
     AssetRegistry->GetAssetsByPath(FName(TEXT("/Game")), Assets, /*bRecursive*/ true);
 
-    FMessageLog MessageLog(TheAssetLinter::MessageLogName);
-    MessageLog.NewPage(LOCTEXT("LinterPage", "Asset naming check"));
-
-    int32 Checked = 0;
-    int32 Violations = 0;
     for(const FAssetData& Asset : Assets)
     {
-        const FString PackagePath = Asset.PackagePath.ToString();
-        if(IsExcludedPackagePath(PackagePath))
+        if(IsExcludedPackagePath(Asset.PackagePath.ToString()))
         {
             continue;
         }
-
         FString ExpectedPrefix;
         if(!ExpectedPrefixFor(Asset, ExpectedPrefix))
         {
             continue;
         }
-        ++Checked;
-
-        const FString AssetName = Asset.AssetName.ToString();
-        if(AssetName.StartsWith(ExpectedPrefix))
+        ++OutChecked;
+        if(!Asset.AssetName.ToString().StartsWith(ExpectedPrefix))
         {
-            continue;
+            OutViolations.Add({Asset, ExpectedPrefix});
         }
-        ++Violations;
+    }
+}
 
+void FTheAssetLinter::CheckAssetNaming()
+{
+    TArray<FViolation> Violations;
+    int32 Checked = 0;
+    GatherViolations(Violations, Checked);
+
+    FMessageLog MessageLog(TheAssetLinter::MessageLogName);
+    MessageLog.NewPage(LOCTEXT("LinterPage", "Asset naming check"));
+    for(const FViolation& Violation : Violations)
+    {
         // Load only the offending asset so the log entry can link straight to it in the Content Browser.
         const TSharedRef<FTokenizedMessage> Message = FTokenizedMessage::Create(EMessageSeverity::Warning);
-        if(const auto Object = Asset.GetAsset())
+        if(const auto Object = Violation.Asset.GetAsset())
         {
             Message->AddToken(FUObjectToken::Create(Object));
         }
         else
         {
-            Message->AddToken(FTextToken::Create(FText::FromString(Asset.GetObjectPathString())));
+            Message->AddToken(FTextToken::Create(FText::FromString(Violation.Asset.GetObjectPathString())));
         }
-        Message->AddToken(FTextToken::Create(FText::Format(LOCTEXT("LinterExpectPrefix", "should start with \"{0}\" ({1})"), FText::FromString(ExpectedPrefix), FText::FromString(Asset.AssetClassPath.GetAssetName().ToString()))));
+        Message->AddToken(FTextToken::Create(FText::Format(LOCTEXT("LinterExpectPrefix", "should start with \"{0}\" ({1})"), FText::FromString(Violation.ExpectedPrefix), FText::FromString(Violation.Asset.AssetClassPath.GetAssetName().ToString()))));
         MessageLog.AddMessage(Message);
     }
 
     FNotificationInfo Info(FText::GetEmpty());
     Info.ExpireDuration = 4.0f;
     Info.bUseSuccessFailIcons = true;
-    if(Violations > 0)
+    if(Violations.Num() > 0)
     {
-        Info.Text = FText::Format(LOCTEXT("LinterFound", "Asset naming: {0} of {1} named off-convention — see the Message Log."), FText::AsNumber(Violations), FText::AsNumber(Checked));
+        Info.Text = FText::Format(LOCTEXT("LinterFound", "Asset naming: {0} of {1} named off-convention — see the Message Log (The -> Fix Naming to auto-add prefixes)."), FText::AsNumber(Violations.Num()), FText::AsNumber(Checked));
         MessageLog.Open(EMessageSeverity::Warning);
     }
     else
@@ -191,10 +196,61 @@ void FTheAssetLinter::CheckAssetNaming()
     const auto Notification = FSlateNotificationManager::Get().AddNotification(Info);
     if(Notification)
     {
-        Notification->SetCompletionState(Violations > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
+        Notification->SetCompletionState(Violations.Num() > 0 ? SNotificationItem::CS_Fail : SNotificationItem::CS_Success);
     }
 
-    UE_LOG(LogTheStyler, Log, TEXT("Asset naming check: %d checked, %d off-convention."), Checked, Violations);
+    UE_LOG(LogTheStyler, Log, TEXT("Asset naming check: %d checked, %d off-convention."), Checked, Violations.Num());
+}
+
+void FTheAssetLinter::FixAssetNaming()
+{
+    TArray<FViolation> Violations;
+    int32 Checked = 0;
+    GatherViolations(Violations, Checked);
+
+    if(Violations.Num() == 0)
+    {
+        FNotificationInfo Info(FText::Format(LOCTEXT("FixNone", "Asset naming: nothing to fix — all {0} assets already follow the convention."), FText::AsNumber(Checked)));
+        Info.ExpireDuration = 4.0f;
+        FSlateNotificationManager::Get().AddNotification(Info);
+        return;
+    }
+
+    // Rename each off-convention asset to prepend its expected prefix. Reference fixup + redirector
+    // creation is handled by IAssetTools::RenameAssets; a name collision leaves that one asset unchanged.
+    TArray<FAssetRenameData> Renames;
+    for(const FViolation& Violation : Violations)
+    {
+        if(const auto Object = Violation.Asset.GetAsset())
+        {
+            const FString NewName = Violation.ExpectedPrefix + Violation.Asset.AssetName.ToString();
+            Renames.Emplace(Object, Violation.Asset.PackagePath.ToString(), NewName);
+        }
+    }
+
+    IAssetTools& AssetTools = FModuleManager::LoadModuleChecked<FAssetToolsModule>(TEXT("AssetTools")).Get();
+    AssetTools.RenameAssets(Renames);
+
+    // Re-scan to count what actually got fixed (collisions or failures stay off-convention).
+    TArray<FViolation> Remaining;
+    int32 Rechecked = 0;
+    GatherViolations(Remaining, Rechecked);
+    const int32 Fixed = Violations.Num() - Remaining.Num();
+
+    FNotificationInfo Info(FText::Format(LOCTEXT("FixDone", "Asset naming: renamed {0} of {1} off-convention assets."), FText::AsNumber(Fixed), FText::AsNumber(Violations.Num())));
+    Info.ExpireDuration = 5.0f;
+    Info.bUseSuccessFailIcons = true;
+    const auto Notification = FSlateNotificationManager::Get().AddNotification(Info);
+    if(Notification)
+    {
+        Notification->SetCompletionState(Remaining.Num() == 0 ? SNotificationItem::CS_Success : SNotificationItem::CS_Fail);
+    }
+    UE_LOG(LogTheStyler, Log, TEXT("Asset naming fix: renamed %d of %d, %d still off-convention."), Fixed, Violations.Num(), Remaining.Num());
+
+    if(Remaining.Num() > 0)
+    {
+        CheckAssetNaming(); // surface the ones that couldn't be renamed (e.g. name collisions)
+    }
 }
 
 void FTheAssetLinter::RegisterMenuEntry()
@@ -213,6 +269,11 @@ void FTheAssetLinter::RegisterMenuEntry()
         LOCTEXT("CheckNamingTooltip", "Check that every /Game asset follows the prefix convention (_Docs/asset_structure.md); off-convention assets are listed (clickable) in the Message Log."),
         FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Search")),
         FUIAction(FExecuteAction::CreateStatic(&FTheAssetLinter::CheckAssetNaming)));
+    Section.AddMenuEntry(TEXT("TheFixAssetNaming"),
+        LOCTEXT("FixNamingLabel", "Fix Naming"),
+        LOCTEXT("FixNamingTooltip", "Rename every off-convention /Game asset to prepend its expected prefix (references are fixed up automatically). Run Check Naming first to review."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Edit")),
+        FUIAction(FExecuteAction::CreateStatic(&FTheAssetLinter::FixAssetNaming)));
 }
 
 #undef LOCTEXT_NAMESPACE
