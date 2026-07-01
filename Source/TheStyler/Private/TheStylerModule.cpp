@@ -68,14 +68,17 @@ void FTheStylerModule::RegisterMenus()
     }
 
     // Toolbar button — every asset editor's toolbar inherits from this shared parent, so one entry
-    // reaches all of them; a visibility gate then shows it only while the active tab hosts a graph
-    // panel, i.e. in node editors (Blueprint, dialogue, material, ...). Bound to a direct action
-    // rather than the command, since the toolbar context has no access to the main-frame command list.
+    // reaches all of them; a visibility gate then shows it only in editors that host a graph panel
+    // (Blueprint, dialogue, material, ...). Both delegates resolve the graph from the toolbar's own
+    // menu context (its owning toolkit), so the button targets the editor it lives in regardless of
+    // which tab role hosts the graph — the Material editor's graph is a fixed Document tab the global
+    // active-tab lookup misses. Bound to a direct action rather than the command, since the toolbar
+    // context has no access to the main-frame command list.
     if(UToolMenu* Toolbar = UToolMenus::Get()->ExtendMenu(TEXT("AssetEditor.DefaultToolBar")))
     {
         FToolUIAction Action;
-        Action.ExecuteAction = FToolMenuExecuteAction::CreateLambda([](const FToolMenuContext&) { FTheGraphArranger::ArrangeActiveGraph(); });
-        Action.IsActionVisibleDelegate = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext&) { return FTheGraphArranger::HasActiveGraph(); });
+        Action.ExecuteAction = FToolMenuExecuteAction::CreateLambda([](const FToolMenuContext& Context) { FTheGraphArranger::ArrangeGraphFromContext(Context); });
+        Action.IsActionVisibleDelegate = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext& Context) { return FTheGraphArranger::HasGraphInContext(Context); });
 
         FToolMenuSection& Section = Toolbar->FindOrAddSection(TEXT("TheStyler"));
         Section.AddEntry(FToolMenuEntry::InitToolBarButton(TEXT("TheArrangeNodes"),

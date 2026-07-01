@@ -10,6 +10,10 @@
 #include "ScopedTransaction.h"
 #include "SGraphNode.h"
 #include "SGraphPanel.h"
+#include "ToolMenuContext.h"
+#include "Toolkits/AssetEditorToolkit.h"
+#include "Toolkits/AssetEditorToolkitMenuContext.h"
+#include "Widgets/Docking/SDockTab.h"
 #include "Widgets/SWindow.h"
 
 #include "TheStylerModule.h"
@@ -115,9 +119,38 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
     return nullptr;
 }
 
-bool FTheGraphArranger::HasActiveGraph()
+TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMenuContext& Context)
 {
-    return FindActiveGraphPanel().IsValid();
+    // Scope discovery to the asset editor whose toolbar hosts the button: the toolbar context carries
+    // that editor's toolkit. Its owner tab's content spans every docked tab, so the graph is found no
+    // matter which tab role hosts it — a Blueprint document tab, our Dialogue major tab, or the Material
+    // editor's fixed Document tab (the global active-tab lookup only sees the latter two).
+    const auto ToolkitContext = Context.FindContext<UAssetEditorToolkitMenuContext>();
+    if(!ToolkitContext)
+    {
+        return nullptr;
+    }
+    const auto Toolkit = ToolkitContext->Toolkit.Pin();
+    if(!Toolkit.IsValid())
+    {
+        return nullptr;
+    }
+    const auto TabManager = Toolkit->GetTabManager();
+    if(!TabManager.IsValid())
+    {
+        return nullptr;
+    }
+    const auto OwnerTab = TabManager->GetOwnerTab();
+    if(!OwnerTab.IsValid())
+    {
+        return nullptr;
+    }
+    return FindGraphPanelRecursive(OwnerTab->GetContent());
+}
+
+bool FTheGraphArranger::HasGraphInContext(const FToolMenuContext& Context)
+{
+    return FindGraphPanelInContext(Context).IsValid();
 }
 
 #pragma endregion
@@ -126,7 +159,16 @@ bool FTheGraphArranger::HasActiveGraph()
 
 void FTheGraphArranger::ArrangeActiveGraph()
 {
-    const auto GraphPanel = FindActiveGraphPanel();
+    ArrangeGraphPanel(FindActiveGraphPanel());
+}
+
+void FTheGraphArranger::ArrangeGraphFromContext(const FToolMenuContext& Context)
+{
+    ArrangeGraphPanel(FindGraphPanelInContext(Context));
+}
+
+void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel)
+{
     if(!GraphPanel.IsValid())
     {
         UE_LOG(LogTheStyler, Warning, TEXT("Arrange Nodes: no active graph panel found."));
