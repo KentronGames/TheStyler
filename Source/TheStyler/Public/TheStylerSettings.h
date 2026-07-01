@@ -11,7 +11,7 @@
  * spacing (Shift+Q), and the Content Browser folder-color sync. Values are project-shared
  * (Config/DefaultEditor.ini) so the look is reproducible from the repository.
  */
-UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "*** The Styler"))
+UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "#The Styler"))
 class THESTYLER_API UTheStylerSettings : public UDeveloperSettings
 {
     GENERATED_BODY()
@@ -68,6 +68,19 @@ public:
     /** Fixed exec-wire color used when the override is on. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling && bOverrideWireColor"))
     FLinearColor WireColor = FLinearColor::White;
+
+#pragma endregion
+
+#pragma region Focus
+
+    /** When one or more nodes are selected, fade the wires that don't touch the selection so the
+     * selected node's connections stand out (focus mode). */
+    UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (EditCondition = "bEnableWireStyling"))
+    bool bFocusDimOnSelection = true;
+
+    /** Opacity multiplier applied to the faded (non-connected) wires. Lower = dimmer. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.05", UIMax = "0.8", EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
+    float FocusDimOpacity = 0.15f;
 
 #pragma endregion
 

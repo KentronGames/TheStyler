@@ -143,6 +143,21 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
     FConnectionParams StyledParams = Params;
     StyledParams.WireThickness *= StylerSettings.WireThicknessScale;
 
+    // Focus/Dim: when nodes are selected, fade the wires that don't touch the selection so the selected
+    // node's connections stand out. SelectedGraphNodes is filled by the graph panel each paint.
+    float DimFactor = 1.0f;
+    if(StylerSettings.bFocusDimOnSelection && SelectedGraphNodes.Num() > 0)
+    {
+        const auto Node1 = StyledParams.AssociatedPin1 ? StyledParams.AssociatedPin1->GetOwningNodeUnchecked() : nullptr;
+        const auto Node2 = StyledParams.AssociatedPin2 ? StyledParams.AssociatedPin2->GetOwningNodeUnchecked() : nullptr;
+        const bool bTouchesSelection = (Node1 && SelectedGraphNodes.Contains(Node1)) || (Node2 && SelectedGraphNodes.Contains(Node2));
+        if(!bTouchesSelection)
+        {
+            DimFactor = StylerSettings.FocusDimOpacity;
+        }
+    }
+    StyledParams.WireColor.A *= DimFactor;
+
     const FVector2f EndDirection = (StyledParams.EndDirection == EGPD_Input) ? FVector2f(1.0f, 0.0f) : FVector2f(-1.0f, 0.0f);
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
 
@@ -161,6 +176,7 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
     if(bExecWire && StylerSettings.bOverrideWireColor)
     {
         StyledParams.WireColor = StylerSettings.WireColor;
+        StyledParams.WireColor.A *= DimFactor; // the override replaced the alpha; re-apply the focus fade
     }
     const FLinearColor BubbleColor = StylerSettings.bOverrideBubbleColor ? StylerSettings.BubbleColor : StyledParams.WireColor;
 

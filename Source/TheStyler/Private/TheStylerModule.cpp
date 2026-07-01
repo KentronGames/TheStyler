@@ -9,6 +9,7 @@
 #include "ToolMenus.h"
 
 #include "TheGraphArranger.h"
+#include "TheMaterialRebuild.h"
 #include "TheStylerCommands.h"
 #include "TheWireDrawingPolicy.h"
 
@@ -92,6 +93,7 @@ void FTheStylerModule::RegisterMenus()
     }
 
     RegisterContentBrowserMenu();
+    FTheMaterialRebuild::RegisterMenuEntry();
 }
 
 void FTheStylerModule::RegisterContentBrowserMenu()

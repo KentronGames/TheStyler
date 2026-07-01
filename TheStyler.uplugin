@@ -18,5 +18,11 @@
 				"Win64"
 			]
 		}
+	],
+	"Plugins": [
+		{
+			"Name": "TheMCP",
+			"Enabled": true
+		}
 	]
 }
