@@ -24,7 +24,6 @@ public class TheStyler : ModuleRules
 			"BlueprintGraph",
 			"ToolMenus",
 			"MainFrame",
-			"MessageLog",
 			// Folder-color sync
 			"AssetTools",
 			"AssetRegistry",
@@ -32,8 +31,6 @@ public class TheStyler : ModuleRules
 			"ContentBrowserData",
 			"ToolWidgets",
 			"Json",
-			// Rebuild-from-HLSL button calls TheMCP's material build (RebuildMaterialFromSource).
-			"TheMCP",
 		});
 	}
 }
