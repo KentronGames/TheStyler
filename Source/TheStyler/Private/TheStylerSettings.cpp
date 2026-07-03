@@ -2,7 +2,7 @@
 
 UTheStylerSettings::UTheStylerSettings()
 {
-    // Default palette for The -> Standard Colors (matches the /Game structure in _Docs/asset_structure.md).
+    // Default palette for The -> Standard Colors (matches the /Game structure in .claude/docs/asset_structure.md).
     // Distinct, readable hues; the owner can retune or extend these in Project Settings.
     StandardFolderColors = {
         {TEXT("Meshes"), FLinearColor(0.15f, 0.35f, 0.85f)}, // blue
