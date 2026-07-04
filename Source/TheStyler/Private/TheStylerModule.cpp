@@ -10,6 +10,7 @@
 
 #include "TheGraphArranger.h"
 #include "TheStylerCommands.h"
+#include "TheStylerSettings.h"
 #include "TheWireDrawingPolicy.h"
 
 #define LOCTEXT_NAMESPACE "TheStyler"
@@ -89,6 +90,34 @@ void FTheStylerModule::RegisterMenus()
             LOCTEXT("ArrangeToolbarLabel", "Arrange"),
             LOCTEXT("ArrangeToolbarTooltip", "Auto-arrange the current graph's nodes — selected, or all if none selected (Shift+Q)."),
             FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("GraphEditor.StraightenConnections"))));
+
+        // Quick toggles for the two wire-styling switches people flip mid-work (flow bubbles, selection
+        // focus-dim). They mutate the plugin settings and persist to the project config, so the state is
+        // shared with Project Settings -> Plugins -> The Styler; wires re-read the settings every paint,
+        // so the effect is immediate. Greyed out while the wire restyle itself is off.
+        const auto AddSettingToggle = [&Section](const FName EntryName, bool UTheStylerSettings::* Flag, const FText& Label, const FText& Tooltip, const FName IconName)
+        {
+            FToolUIAction Toggle;
+            Toggle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
+                [Flag](const FToolMenuContext&)
+                {
+                    const auto Settings = GetMutableDefault<UTheStylerSettings>();
+                    Settings->*Flag = !(Settings->*Flag);
+                    Settings->TryUpdateDefaultConfigFile();
+                });
+            Toggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([Flag](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->*Flag ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+            Toggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling; });
+            Toggle.IsActionVisibleDelegate = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext& Context) { return FTheGraphArranger::HasGraphInContext(Context); });
+
+            Section.AddEntry(FToolMenuEntry::InitToolBarButton(EntryName, FToolUIActionChoice(Toggle), Label, Tooltip, FSlateIcon(FAppStyle::GetAppStyleSetName(), IconName), EUserInterfaceActionType::ToggleButton));
+        };
+
+        AddSettingToggle(TEXT("TheToggleBubbles"), &UTheStylerSettings::bShowExecBubbles, LOCTEXT("BubblesToolbarLabel", "Bubbles"), LOCTEXT("BubblesToolbarTooltip", "Show the animated flow dots along exec wires."), TEXT("Graph.ExecutionBubble"));
+        AddSettingToggle(TEXT("TheToggleFocus"),
+            &UTheStylerSettings::bFocusDimOnSelection,
+            LOCTEXT("FocusToolbarLabel", "Focus"),
+            LOCTEXT("FocusToolbarTooltip", "Dim wires not touching the selected nodes (focus mode)."),
+            TEXT("GraphEditor.ToggleHideUnrelatedNodes"));
     }
 
     RegisterContentBrowserMenu();
