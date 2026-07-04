@@ -24,9 +24,11 @@
 
 namespace
 {
-// Default node extent used when a node's widget size is not available yet.
-constexpr double DefaultNodeWidth = 200.0;
-constexpr double DefaultNodeHeight = 128.0;
+// Default node extent used when a node's widget size is not available yet (offscreen / just-opened
+// graphs measure as zero). Sized generously — an underestimated width makes adjacent columns TOUCH
+// (the layer gap is width + SpacingX), and the project's dialogue/quest nodes run ~340 units wide.
+constexpr double DefaultNodeWidth = 340.0;
+constexpr double DefaultNodeHeight = 150.0;
 
 struct FArrangeNode
 {

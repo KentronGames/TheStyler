@@ -111,6 +111,23 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         StyledParams.WireColor.A *= DimFactor; // the override replaced the alpha; re-apply the focus fade
     }
 
+    // Outcome pins (subcategory-marked by the project's graph editors: Success/True, Failed/False)
+    // pass their green/red onto the wire — engine exec wires ignore the pin color, so the
+    // inheritance has to be explicit here. Keyed by subcategory to stay decoupled; K2 graphs never
+    // mark pins, so Blueprints are unaffected.
+    if(bExecWire && StyledParams.AssociatedPin1)
+    {
+        const FName SourceSubCategory = StyledParams.AssociatedPin1->PinType.PinSubCategory;
+        if(SourceSubCategory == TEXT("Success") || SourceSubCategory == TEXT("True"))
+        {
+            StyledParams.WireColor = FLinearColor(0.2f, 0.8f, 0.2f, StyledParams.WireColor.A);
+        }
+        else if(SourceSubCategory == TEXT("Failed") || SourceSubCategory == TEXT("False"))
+        {
+            StyledParams.WireColor = FLinearColor(0.8f, 0.2f, 0.2f, StyledParams.WireColor.A);
+        }
+    }
+
     ClosestDistanceSquared = FLT_MAX;
 
     if(WireStyle == ETheWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
