@@ -111,6 +111,23 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         StyledParams.WireColor.A *= DimFactor; // the override replaced the alpha; re-apply the focus fade
     }
 
+    // Two-outcome nodes (quest Stage/Branch, dialogue Branch): tint the WIRE by its source pin so the
+    // routing reads on the wire itself — the pins keep their stock look (owner rule). Matched by pin
+    // name to stay decoupled from the project's editor modules; K2 branch pins are named "then"/"else",
+    // so Blueprint graphs are unaffected.
+    if(bExecWire && StyledParams.AssociatedPin1)
+    {
+        const FName SourcePinName = StyledParams.AssociatedPin1->PinName;
+        if(SourcePinName == TEXT("Success") || SourcePinName == TEXT("True"))
+        {
+            StyledParams.WireColor = FLinearColor(0.2f, 0.8f, 0.2f, StyledParams.WireColor.A);
+        }
+        else if(SourcePinName == TEXT("Failed") || SourcePinName == TEXT("False"))
+        {
+            StyledParams.WireColor = FLinearColor(0.8f, 0.2f, 0.2f, StyledParams.WireColor.A);
+        }
+    }
+
     ClosestDistanceSquared = FLT_MAX;
 
     if(WireStyle == ETheWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)

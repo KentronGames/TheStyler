@@ -7,6 +7,7 @@
 #include "Styling/AppStyle.h"
 #include "Textures/SlateIcon.h"
 #include "ToolMenus.h"
+#include "UObject/UObjectIterator.h"
 
 #include "TheGraphArranger.h"
 #include "TheStylerCommands.h"
@@ -159,6 +160,23 @@ void FTheStylerModule::RegisterMenus()
                 const auto Settings = GetMutableDefault<UTheStylerSettings>();
                 Settings->bFocusDimOnSelection = !Settings->bFocusDimOnSelection;
                 Settings->TryUpdateDefaultConfigFile();
+
+                // Focus is one concept to the user, but node dimming lives in per-editor settings
+                // (the dialogue/quest editors' bDimUnselectedNodes). Flip every such flag in sync,
+                // matched by property name so the plugin stays decoupled from those modules.
+                for(TObjectIterator<UClass> ClassNdx; ClassNdx; ++ClassNdx)
+                {
+                    if(!ClassNdx->IsChildOf(UDeveloperSettings::StaticClass()) || ClassNdx->HasAnyClassFlags(CLASS_Abstract) || *ClassNdx == UTheStylerSettings::StaticClass())
+                    {
+                        continue;
+                    }
+                    if(FBoolProperty* const DimProperty = FindFProperty<FBoolProperty>(*ClassNdx, TEXT("bDimUnselectedNodes")))
+                    {
+                        const auto EditorSettings = CastChecked<UDeveloperSettings>(ClassNdx->GetDefaultObject());
+                        DimProperty->SetPropertyValue_InContainer(EditorSettings, Settings->bFocusDimOnSelection);
+                        EditorSettings->TryUpdateDefaultConfigFile();
+                    }
+                }
             });
         FocusToggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bFocusDimOnSelection ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
         FocusToggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling; });
