@@ -91,33 +91,84 @@ void FTheStylerModule::RegisterMenus()
             LOCTEXT("ArrangeToolbarTooltip", "Auto-arrange the current graph's nodes — selected, or all if none selected (Shift+Q)."),
             FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("GraphEditor.StraightenConnections"))));
 
-        // Quick toggles for the two wire-styling switches people flip mid-work (flow bubbles, selection
-        // focus-dim). They mutate the plugin settings and persist to the project config, so the state is
-        // shared with Project Settings -> Plugins -> The Styler; wires re-read the settings every paint,
-        // so the effect is immediate. Greyed out while the wire restyle itself is off.
-        const auto AddSettingToggle = [&Section](const FName EntryName, bool UTheStylerSettings::* Flag, const FText& Label, const FText& Tooltip, const FName IconName)
-        {
-            FToolUIAction Toggle;
-            Toggle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
-                [Flag](const FToolMenuContext&)
+        // Wire-styling quick controls. Both mutate the plugin settings and persist to the project
+        // config, so the state is shared with Project Settings -> Plugins -> The Styler; wires
+        // re-read the settings every paint, so the effect is immediate.
+        const auto GraphVisible = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext& Context) { return FTheGraphArranger::HasGraphInContext(Context); });
+
+        // "Wires" cycles the routing style, with Off as part of the loop:
+        // Off -> Manhattan -> Metro 45 -> Straight -> Off. The label shows the current state.
+        FToolUIAction CycleStyle;
+        CycleStyle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
+            [](const FToolMenuContext&)
+            {
+                const auto Settings = GetMutableDefault<UTheStylerSettings>();
+                if(!Settings->bEnableWireStyling)
                 {
-                    const auto Settings = GetMutableDefault<UTheStylerSettings>();
-                    Settings->*Flag = !(Settings->*Flag);
-                    Settings->TryUpdateDefaultConfigFile();
-                });
-            Toggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([Flag](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->*Flag ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
-            Toggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling; });
-            Toggle.IsActionVisibleDelegate = FToolMenuIsActionButtonVisible::CreateLambda([](const FToolMenuContext& Context) { return FTheGraphArranger::HasGraphInContext(Context); });
+                    Settings->bEnableWireStyling = true;
+                    Settings->WireStyle = ETheWireStyle::Manhattan;
+                }
+                else if(Settings->WireStyle == ETheWireStyle::Manhattan)
+                {
+                    Settings->WireStyle = ETheWireStyle::Metro45;
+                }
+                else if(Settings->WireStyle == ETheWireStyle::Metro45)
+                {
+                    Settings->WireStyle = ETheWireStyle::Straight;
+                }
+                else
+                {
+                    Settings->bEnableWireStyling = false;
+                    Settings->WireStyle = ETheWireStyle::Manhattan;
+                }
+                Settings->TryUpdateDefaultConfigFile();
+            });
+        CycleStyle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+        CycleStyle.IsActionVisibleDelegate = GraphVisible;
 
-            Section.AddEntry(FToolMenuEntry::InitToolBarButton(EntryName, FToolUIActionChoice(Toggle), Label, Tooltip, FSlateIcon(FAppStyle::GetAppStyleSetName(), IconName), EUserInterfaceActionType::ToggleButton));
-        };
+        const TAttribute<FText> StyleLabel = TAttribute<FText>::CreateLambda(
+            []()
+            {
+                const auto Settings = GetDefault<UTheStylerSettings>();
+                if(!Settings->bEnableWireStyling)
+                {
+                    return LOCTEXT("WireStyleOff", "Wires: Off");
+                }
+                switch(Settings->WireStyle)
+                {
+                    case ETheWireStyle::Metro45:
+                        return LOCTEXT("WireStyleMetro", "Metro 45");
+                    case ETheWireStyle::Straight:
+                        return LOCTEXT("WireStyleStraight", "Straight");
+                    default:
+                        return LOCTEXT("WireStyleManhattan", "Manhattan");
+                }
+            });
+        Section.AddEntry(FToolMenuEntry::InitToolBarButton(TEXT("TheCycleWireStyle"),
+            FToolUIActionChoice(CycleStyle),
+            StyleLabel,
+            LOCTEXT("WireStyleTooltip", "Cycle the exec-wire style: Off -> Manhattan -> Metro 45 -> Straight."),
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("GraphEditor.StraightenConnections")),
+            EUserInterfaceActionType::ToggleButton));
 
-        AddSettingToggle(TEXT("TheToggleBubbles"), &UTheStylerSettings::bShowExecBubbles, LOCTEXT("BubblesToolbarLabel", "Bubbles"), LOCTEXT("BubblesToolbarTooltip", "Show the animated flow dots along exec wires."), TEXT("Graph.ExecutionBubble"));
-        AddSettingToggle(TEXT("TheToggleFocus"),
-            &UTheStylerSettings::bFocusDimOnSelection,
+        // Focus-dim toggle; greyed out while the wire restyle itself is off.
+        FToolUIAction FocusToggle;
+        FocusToggle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
+            [](const FToolMenuContext&)
+            {
+                const auto Settings = GetMutableDefault<UTheStylerSettings>();
+                Settings->bFocusDimOnSelection = !Settings->bFocusDimOnSelection;
+                Settings->TryUpdateDefaultConfigFile();
+            });
+        FocusToggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bFocusDimOnSelection ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+        FocusToggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling; });
+        FocusToggle.IsActionVisibleDelegate = GraphVisible;
+        Section.AddEntry(FToolMenuEntry::InitToolBarButton(TEXT("TheToggleFocus"),
+            FToolUIActionChoice(FocusToggle),
             LOCTEXT("FocusToolbarLabel", "Focus"),
             LOCTEXT("FocusToolbarTooltip", "Dim wires not touching the selected nodes (focus mode)."),
-            TEXT("GraphEditor.ToggleHideUnrelatedNodes"));
+            FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("GraphEditor.ToggleHideUnrelatedNodes")),
+            EUserInterfaceActionType::ToggleButton));
     }
 
     RegisterContentBrowserMenu();

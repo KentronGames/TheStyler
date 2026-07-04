@@ -5,10 +5,22 @@
 
 #include "TheStylerSettings.generated.h"
 
+/** Routing style for the restyled exec wires. */
+UENUM()
+enum class ETheWireStyle : uint8
+{
+    /** Right-angle elbows with rounded corners. */
+    Manhattan,
+    /** Horizontal leads joined by a 45-degree diagonal (metro-map look). */
+    Metro45,
+    /** Straight pin-to-pin lines. */
+    Straight
+};
+
 /**
  * Editor settings for the TheStyler plugin — Project Settings -> Plugins -> "The Styler".
- * Tunes the Manhattan wire restyle, the animated flow dots along exec wires, node auto-arrange
- * spacing (Shift+Q), and the Content Browser folder-color sync. Values are project-shared
+ * Tunes the exec-wire restyle (Manhattan/Metro/Straight), node auto-arrange spacing (Shift+Q),
+ * and the Content Browser folder-color sync. Values are project-shared
  * (Config/DefaultEditor.ini) so the look is reproducible from the repository.
  */
 UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "#The Styler"))
@@ -40,9 +52,13 @@ public:
 
 #pragma region Wires
 
-    /** Master switch for the right-angle (Manhattan) restyle of exec wires. Off = engine default wires. */
+    /** Master switch for the exec-wire restyle. Off = engine default wires. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires")
     bool bEnableWireStyling = true;
+
+    /** How restyled wires are routed (also cycled by the graph-toolbar Wires button). */
+    UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
+    ETheWireStyle WireStyle = ETheWireStyle::Manhattan;
 
     /** Also route data wires Manhattan-style. Off (default) = data wires keep the engine spline; they
      * never get flow dots, the arrowhead or the exec color override — only the right-angle routing. */
@@ -81,38 +97,6 @@ public:
     /** Opacity multiplier applied to the faded (non-connected) wires. Lower = dimmer. */
     UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.05", UIMax = "0.8", EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
     float FocusDimOpacity = 0.15f;
-
-#pragma endregion
-
-#pragma region Bubbles
-
-    /** Draw the animated flow dots that run along exec wires. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (EditCondition = "bEnableWireStyling"))
-    bool bShowExecBubbles = true;
-
-    /** Distance (graph units, pre-zoom) between consecutive flow dots. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (ClampMin = "1.0", UIMin = "8.0", UIMax = "256.0", EditCondition = "bEnableWireStyling && bShowExecBubbles"))
-    float BubbleSpacing = 64.0f;
-
-    /** Travel speed (graph units per second, pre-zoom) of the flow dots. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (ClampMin = "0.0", UIMax = "512.0", EditCondition = "bEnableWireStyling && bShowExecBubbles"))
-    float BubbleSpeed = 192.0f;
-
-    /** Flow-dot size as a fraction of the bubble image, further scaled by wire thickness. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (ClampMin = "0.01", UIMax = "1.0", EditCondition = "bEnableWireStyling && bShowExecBubbles"))
-    float BubbleSizeScale = 0.2f;
-
-    /** Tint the flow dots a fixed color instead of matching the wire. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (EditCondition = "bEnableWireStyling && bShowExecBubbles"))
-    bool bOverrideBubbleColor = false;
-
-    /** Fixed flow-dot color used when the override is on. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (EditCondition = "bEnableWireStyling && bShowExecBubbles && bOverrideBubbleColor"))
-    FLinearColor BubbleColor = FLinearColor::White;
-
-    /** Draw a direction arrowhead near each exec wire's input pin. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Bubbles", meta = (EditCondition = "bEnableWireStyling"))
-    bool bShowDirectionArrow = true;
 
 #pragma endregion
 

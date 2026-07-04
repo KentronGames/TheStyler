@@ -18,21 +18,6 @@ bool IsExecPin(const UEdGraphPin* Pin)
     return Pin != nullptr && Pin->PinType.PinCategory == UEdGraphSchema_K2::PC_Exec;
 }
 
-// Point at arc-length Distance along a polyline (used to place flow bubbles).
-FVector2f PointAlongPath(TArrayView<const FVector2f> Path, float Distance)
-{
-    for(int32 Ndx = 1; Ndx < Path.Num(); ++Ndx)
-    {
-        const float SegLength = FVector2f::Distance(Path[Ndx - 1], Path[Ndx]);
-        if(Distance <= SegLength)
-        {
-            const FVector2f Direction = (Path[Ndx] - Path[Ndx - 1]).GetSafeNormal();
-            return Path[Ndx - 1] + Direction * Distance;
-        }
-        Distance -= SegLength;
-    }
-    return Path.Last();
-}
 }
 
 FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(const UEdGraphSchema* Schema,
@@ -67,59 +52,6 @@ void FTheWireConnectionDrawingPolicy::DrawStraightWire(int32 LayerId, const FVec
     }
     FSlateDrawElement::MakeDrawSpaceSpline(DrawElementsList, LayerId, A, FVector2f::ZeroVector, B, FVector2f::ZeroVector, Params.WireThickness, ESlateDrawEffect::None, Params.WireColor);
     AccumulateClosestPoint(A, B);
-}
-
-void FTheWireConnectionDrawingPolicy::DrawExecBubbles(int32 LayerId, TArrayView<const FVector2f> Path, float WireThickness, const FLinearColor& Color)
-{
-    if(BubbleImage == nullptr || Path.Num() < 2)
-    {
-        return;
-    }
-
-    float TotalLength = 0.0f;
-    for(int32 Ndx = 1; Ndx < Path.Num(); ++Ndx)
-    {
-        TotalLength += FVector2f::Distance(Path[Ndx - 1], Path[Ndx]);
-    }
-    if(TotalLength <= KINDA_SMALL_NUMBER)
-    {
-        return;
-    }
-
-    // Cadence and size come from the plugin settings (defaults match the engine's native exec bubbles).
-    const auto& StylerSettings = *GetDefault<UTheStylerSettings>();
-    const float BubbleSpacing = StylerSettings.BubbleSpacing * ZoomFactor;
-    const float BubbleSpeed = StylerSettings.BubbleSpeed * ZoomFactor;
-    const FVector2f BubbleSize = BubbleImage->ImageSize * ZoomFactor * StylerSettings.BubbleSizeScale * WireThickness;
-
-    const float Time = static_cast<float>(FPlatformTime::Seconds() - GStartTime);
-    const float StartOffset = FMath::Fmod(Time * BubbleSpeed, BubbleSpacing);
-    const int32 NumBubbles = FMath::CeilToInt(TotalLength / BubbleSpacing);
-    for(int32 BubbleNdx = 0; BubbleNdx < NumBubbles; ++BubbleNdx)
-    {
-        const float Distance = BubbleNdx * BubbleSpacing + StartOffset;
-        if(Distance >= TotalLength)
-        {
-            continue;
-        }
-        const FVector2f BubblePos = PointAlongPath(Path, Distance) - BubbleSize * 0.5f;
-        FSlateDrawElement::MakeBox(DrawElementsList, LayerId, FPaintGeometry(BubblePos, BubbleSize, ZoomFactor), BubbleImage, ESlateDrawEffect::None, Color);
-    }
-}
-
-void FTheWireConnectionDrawingPolicy::DrawDirectionArrow(int32 LayerId, const FVector2f& End, const FVector2f& EndDirection, const FLinearColor& Color)
-{
-    const FSlateBrush* Arrow = FAppStyle::GetBrush(TEXT("Graph.Arrow"));
-    if(Arrow == nullptr)
-    {
-        return;
-    }
-    const FVector2f ArrowSize = Arrow->ImageSize * ZoomFactor;
-    const float AngleInRadians = FMath::Atan2(EndDirection.Y, EndDirection.X);
-    // Sit the arrowhead just short of the input pin, centred on the wire.
-    const FVector2f Centre = End - EndDirection * (ArrowSize.X * 0.5f);
-    const FVector2f DrawPos = Centre - ArrowSize * 0.5f;
-    FSlateDrawElement::MakeRotatedBox(DrawElementsList, LayerId, FPaintGeometry(DrawPos, ArrowSize, ZoomFactor), Arrow, ESlateDrawEffect::None, AngleInRadians, TOptional<FVector2f>(), FSlateDrawElement::RelativeToElement, Color);
 }
 
 void FTheWireConnectionDrawingPolicy::AccumulateClosestPoint(const FVector2f& A, const FVector2f& B)
@@ -158,43 +90,55 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
     }
     StyledParams.WireColor.A *= DimFactor;
 
-    const FVector2f EndDirection = (StyledParams.EndDirection == EGPD_Input) ? FVector2f(1.0f, 0.0f) : FVector2f(-1.0f, 0.0f);
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
 
-    // Exec wires always get the Manhattan restyle; data wires (usually many and crossing) only when the
-    // user opts in, and even then they keep their pin-type colour and get no exec-flow visuals below.
-    // Backward wires fall back to the spline, since a mid-X elbow would route back over the source node.
-    const bool bManhattan = bExecWire || StylerSettings.bManhattanDataWires;
-    if(!bManhattan || End.X <= Start.X)
+    // Exec wires always get the restyle; data wires (usually many and crossing) only when the user
+    // opts in, and even then they keep their pin-type colour. Backward wires fall back to the spline
+    // for the elbowed styles — a mid-X bend would route back over the source node; straight lines
+    // have no such problem and stay restyled in any direction.
+    const bool bRestyled = bExecWire || StylerSettings.bManhattanDataWires;
+    const ETheWireStyle WireStyle = StylerSettings.WireStyle;
+    if(!bRestyled || (WireStyle != ETheWireStyle::Straight && End.X <= Start.X))
     {
         FKismetConnectionDrawingPolicy::DrawConnection(LayerId, Start, End, StyledParams);
         return;
     }
 
-    // Optional fixed exec-wire colour; otherwise keep the pin-type colour. Bubbles follow the wire
-    // colour unless they have their own override.
+    // Optional fixed exec-wire colour; otherwise keep the pin-type colour.
     if(bExecWire && StylerSettings.bOverrideWireColor)
     {
         StyledParams.WireColor = StylerSettings.WireColor;
         StyledParams.WireColor.A *= DimFactor; // the override replaced the alpha; re-apply the focus fade
     }
-    const FLinearColor BubbleColor = StylerSettings.bOverrideBubbleColor ? StylerSettings.BubbleColor : StyledParams.WireColor;
 
     ClosestDistanceSquared = FLT_MAX;
 
-    if(FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
+    if(WireStyle == ETheWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
     {
-        // Short link: a tiny elbow looks bad — draw it straight.
+        // Straight style — or a link too short for an elbow to look good in the other styles.
         DrawStraightWire(LayerId, Start, End, StyledParams);
     }
     else
     {
-        // Manhattan path: horizontal out of Start -> vertical -> horizontal into End, bending at the mid X.
+        // Elbowed polyline. Manhattan: horizontal -> vertical at the mid X -> horizontal.
+        // Metro 45: equal horizontal leads joined by an exact 45-degree diagonal; a link too steep
+        // for the diagonal to fit degrades to the Manhattan bend.
+        const float DeltaY = FMath::Abs(End.Y - Start.Y);
         const float MidX = (Start.X + End.X) * 0.5f;
+
         TArray<FVector2f, TInlineAllocator<4>> Points;
         Points.Add(Start);
-        Points.Add(FVector2f(MidX, Start.Y));
-        Points.Add(FVector2f(MidX, End.Y));
+        if(WireStyle == ETheWireStyle::Metro45 && End.X - Start.X > DeltaY && DeltaY > KINDA_SMALL_NUMBER)
+        {
+            const float Lead = (End.X - Start.X - DeltaY) * 0.5f;
+            Points.Add(FVector2f(Start.X + Lead, Start.Y));
+            Points.Add(FVector2f(Start.X + Lead + DeltaY, End.Y));
+        }
+        else
+        {
+            Points.Add(FVector2f(MidX, Start.Y));
+            Points.Add(FVector2f(MidX, End.Y));
+        }
         Points.Add(End);
 
         const float Radius = StylerSettings.CornerRadius * ZoomFactor;
@@ -228,18 +172,6 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
             Cursor = Exit;
         }
         DrawStraightWire(LayerId, Cursor, Points.Last(), StyledParams);
-
-        // Animated flow dots along the exec path.
-        if(bExecWire && StylerSettings.bShowExecBubbles)
-        {
-            DrawExecBubbles(LayerId, Points, StyledParams.WireThickness, BubbleColor);
-        }
-    }
-
-    // Direction arrowhead near the input pin (exec flow only).
-    if(bExecWire && StylerSettings.bShowDirectionArrow)
-    {
-        DrawDirectionArrow(LayerId, End, EndDirection, StyledParams.WireColor);
     }
 
     // Preserve wire hover/selection: report the closest point on the drawn path (mirrors the base policy).

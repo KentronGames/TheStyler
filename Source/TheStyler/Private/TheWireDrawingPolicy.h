@@ -14,8 +14,8 @@ struct FTheWireConnectionFactory : public FGraphPanelPinConnectionFactory
 };
 
 /**
- * Right-angle (Manhattan) wire style with rounded corners for Blueprint exec wires.
- * Data wires keep the engine default spline. All wires are drawn a little thicker.
+ * Restyled exec wires — Manhattan elbows, Metro 45-degree diagonals, or straight lines
+ * (ETheWireStyle). Data wires keep the engine default spline. All wires are drawn a little thicker.
  */
 class FTheWireConnectionDrawingPolicy : public FKismetConnectionDrawingPolicy
 {
@@ -29,10 +29,6 @@ public:
 
 private:
     void DrawStraightWire(int32 LayerId, const FVector2f& A, const FVector2f& B, const FConnectionParams& Params);
-
-    // Flow dots animated along the exec wire's path, and a direction arrowhead near the input pin.
-    void DrawExecBubbles(int32 LayerId, TArrayView<const FVector2f> Path, float WireThickness, const FLinearColor& Color);
-    void DrawDirectionArrow(int32 LayerId, const FVector2f& End, const FVector2f& EndDirection, const FLinearColor& Color);
 
     // Track the drawn path's closest point to the mouse so wire hover/selection keeps working.
     void AccumulateClosestPoint(const FVector2f& A, const FVector2f& B);
