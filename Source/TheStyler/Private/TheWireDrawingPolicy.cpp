@@ -48,11 +48,11 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
         return nullptr; // styling disabled -> engine default policy for every graph
     }
 
-    // Blueprint (K2) graphs, and our dialogue graph — its nodes use PC_Exec pins laid out
+    // Blueprint (K2) graphs, and our dialogue/quest graphs — their nodes use PC_Exec pins laid out
     // horizontally, so the same exec-Manhattan path applies. Matched by schema class name to keep
     // this plugin decoupled from the project's editor module.
-    const bool bDialogueGraph = Schema && Schema->GetClass()->GetFName() == TEXT("TheDialogueGraphSchema");
-    if(Schema && (Schema->IsA(UEdGraphSchema_K2::StaticClass()) || bDialogueGraph))
+    const bool bTheGraph = Schema && (Schema->GetClass()->GetFName() == TEXT("TheDialogueGraphSchema") || Schema->GetClass()->GetFName() == TEXT("TheQuestGraphSchema"));
+    if(Schema && (Schema->IsA(UEdGraphSchema_K2::StaticClass()) || bTheGraph))
     {
         return new FTheWireConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements, InGraphObj);
     }
