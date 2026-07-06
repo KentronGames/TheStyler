@@ -42,6 +42,43 @@ struct FArrangeNode
     double PosX = 0.0;
     double PosY = 0.0;
 };
+
+struct FSelNode
+{
+    UEdGraphNode* Node = nullptr;
+    FVector2D Size = FVector2D(DefaultNodeWidth, DefaultNodeHeight);
+};
+
+// Selected, non-comment nodes of the panel's graph, each with its on-screen size (or a default when the
+// widget has not been measured yet — offscreen / just-opened graphs report zero).
+TArray<FSelNode> GatherSelectedNodes(const TSharedPtr<SGraphPanel>& Panel)
+{
+    TArray<FSelNode> Out;
+    UEdGraph* const Graph = Panel->GetGraphObj();
+    if(!IsValid(Graph))
+    {
+        return Out;
+    }
+    for(UEdGraphNode* Node : Graph->Nodes)
+    {
+        if(!IsValid(Node) || Node->IsA<UEdGraphNode_Comment>() || !Panel->SelectionManager.IsNodeSelected(Node))
+        {
+            continue;
+        }
+        FSelNode Sel;
+        Sel.Node = Node;
+        if(const auto NodeWidget = Panel->GetNodeWidgetFromGuid(Node->NodeGuid))
+        {
+            const FVector2D Desired = NodeWidget->GetDesiredSize();
+            if(Desired.X > 1.0 && Desired.Y > 1.0)
+            {
+                Sel.Size = Desired;
+            }
+        }
+        Out.Add(Sel);
+    }
+    return Out;
+}
 }
 
 #pragma region Panel discovery
@@ -525,6 +562,131 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         Node.Graph->Modify();
         Node.Graph->NodePosX = FMath::RoundToInt32(Node.PosX + OffsetX);
         Node.Graph->NodePosY = FMath::RoundToInt32(Node.PosY + OffsetY);
+    }
+    Graph->NotifyGraphChanged();
+}
+
+#pragma endregion
+
+#pragma region Align & Distribute
+
+void FTheGraphArranger::AlignActiveSelection(ETheAlign Mode)
+{
+    const auto Panel = FindActiveGraphPanel();
+    if(!Panel.IsValid())
+    {
+        UE_LOG(LogTheStyler, Warning, TEXT("Align: no active graph panel found."));
+        return;
+    }
+    UEdGraph* const Graph = Panel->GetGraphObj();
+    if(!IsValid(Graph))
+    {
+        return;
+    }
+
+    TArray<FSelNode> Selection = GatherSelectedNodes(Panel);
+    if(Selection.Num() < 2)
+    {
+        UE_LOG(LogTheStyler, Verbose, TEXT("Align: select two or more nodes."));
+        return;
+    }
+
+    double MinX = TNumericLimits<double>::Max();
+    double MinY = TNumericLimits<double>::Max();
+    double MaxRight = TNumericLimits<double>::Lowest();
+    double MaxBottom = TNumericLimits<double>::Lowest();
+    for(const FSelNode& Sel : Selection)
+    {
+        MinX = FMath::Min(MinX, static_cast<double>(Sel.Node->NodePosX));
+        MinY = FMath::Min(MinY, static_cast<double>(Sel.Node->NodePosY));
+        MaxRight = FMath::Max(MaxRight, Sel.Node->NodePosX + Sel.Size.X);
+        MaxBottom = FMath::Max(MaxBottom, Sel.Node->NodePosY + Sel.Size.Y);
+    }
+    const double CenterX = (MinX + MaxRight) * 0.5;
+    const double CenterY = (MinY + MaxBottom) * 0.5;
+
+    const FScopedTransaction Transaction(LOCTEXT("AlignNodesTransaction", "Align Nodes"));
+    Graph->Modify();
+    for(const FSelNode& Sel : Selection)
+    {
+        Sel.Node->Modify();
+        switch(Mode)
+        {
+            case ETheAlign::Left:
+                Sel.Node->NodePosX = FMath::RoundToInt32(MinX);
+                break;
+            case ETheAlign::Right:
+                Sel.Node->NodePosX = FMath::RoundToInt32(MaxRight - Sel.Size.X);
+                break;
+            case ETheAlign::Top:
+                Sel.Node->NodePosY = FMath::RoundToInt32(MinY);
+                break;
+            case ETheAlign::Bottom:
+                Sel.Node->NodePosY = FMath::RoundToInt32(MaxBottom - Sel.Size.Y);
+                break;
+            case ETheAlign::CenterX:
+                Sel.Node->NodePosX = FMath::RoundToInt32(CenterX - Sel.Size.X * 0.5);
+                break;
+            case ETheAlign::CenterY:
+                Sel.Node->NodePosY = FMath::RoundToInt32(CenterY - Sel.Size.Y * 0.5);
+                break;
+        }
+    }
+    Graph->NotifyGraphChanged();
+}
+
+void FTheGraphArranger::DistributeActiveSelection(ETheDistribute Axis)
+{
+    const auto Panel = FindActiveGraphPanel();
+    if(!Panel.IsValid())
+    {
+        UE_LOG(LogTheStyler, Warning, TEXT("Distribute: no active graph panel found."));
+        return;
+    }
+    UEdGraph* const Graph = Panel->GetGraphObj();
+    if(!IsValid(Graph))
+    {
+        return;
+    }
+
+    TArray<FSelNode> Selection = GatherSelectedNodes(Panel);
+    if(Selection.Num() < 3)
+    {
+        UE_LOG(LogTheStyler, Verbose, TEXT("Distribute: select three or more nodes."));
+        return;
+    }
+
+    const bool bHorizontal = Axis == ETheDistribute::Horizontal;
+    Selection.Sort([bHorizontal](const FSelNode& A, const FSelNode& B) { return bHorizontal ? A.Node->NodePosX < B.Node->NodePosX : A.Node->NodePosY < B.Node->NodePosY; });
+
+    // Keep the two extreme nodes put and spread the leftover space as equal gaps between the rest.
+    const FSelNode& First = Selection[0];
+    const FSelNode& Last = Selection.Last();
+    const double SpanStart = bHorizontal ? First.Node->NodePosX : First.Node->NodePosY;
+    const double SpanEnd = bHorizontal ? (Last.Node->NodePosX + Last.Size.X) : (Last.Node->NodePosY + Last.Size.Y);
+    double TotalSize = 0.0;
+    for(const FSelNode& Sel : Selection)
+    {
+        TotalSize += bHorizontal ? Sel.Size.X : Sel.Size.Y;
+    }
+    const double Gap = (SpanEnd - SpanStart - TotalSize) / (Selection.Num() - 1);
+
+    const FScopedTransaction Transaction(LOCTEXT("DistributeNodesTransaction", "Distribute Nodes"));
+    Graph->Modify();
+    double Cursor = SpanStart;
+    for(const FSelNode& Sel : Selection)
+    {
+        Sel.Node->Modify();
+        if(bHorizontal)
+        {
+            Sel.Node->NodePosX = FMath::RoundToInt32(Cursor);
+            Cursor += Sel.Size.X + Gap;
+        }
+        else
+        {
+            Sel.Node->NodePosY = FMath::RoundToInt32(Cursor);
+            Cursor += Sel.Size.Y + Gap;
+        }
     }
     Graph->NotifyGraphChanged();
 }

@@ -23,6 +23,30 @@ public:
     /** True when that asset editor hosts a graph panel — gates the toolbar button to node editors. */
     static bool HasGraphInContext(const FToolMenuContext& Context);
 
+    /** Which shared edge/center the selected nodes align to. */
+    enum class ETheAlign : uint8
+    {
+        Left,
+        Right,
+        Top,
+        Bottom,
+        CenterX, // shared vertical center line (equal horizontal centers)
+        CenterY, // shared horizontal center line (equal vertical centers)
+    };
+
+    /** Axis along which the selected nodes' gaps are evened out. */
+    enum class ETheDistribute : uint8
+    {
+        Horizontal,
+        Vertical,
+    };
+
+    /** Align the active graph's selected nodes to a shared edge/center (needs 2+ selected nodes). */
+    static void AlignActiveSelection(ETheAlign Mode);
+
+    /** Even out the gaps between the active graph's selected nodes along an axis (needs 3+ nodes). */
+    static void DistributeActiveSelection(ETheDistribute Axis);
+
 private:
     enum class EArrangeScope : uint8
     {

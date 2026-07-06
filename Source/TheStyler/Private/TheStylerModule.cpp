@@ -27,6 +27,18 @@ void FTheStylerModule::StartupModule()
     MainFrame.GetMainFrameCommandBindings()->MapAction(FTheStylerCommands::Get().ArrangeNodes, FExecuteAction::CreateStatic(&FTheGraphArranger::ArrangeActiveGraph));
     MainFrame.GetMainFrameCommandBindings()->MapAction(FTheStylerCommands::Get().FormatNode, FExecuteAction::CreateStatic(&FTheGraphArranger::FormatActiveSelection));
 
+    // Align / Distribute — bound to the same main-frame command list so their menu entries fire while a graph is focused.
+    const auto& Cmds = FTheStylerCommands::Get();
+    const auto Bindings = MainFrame.GetMainFrameCommandBindings();
+    Bindings->MapAction(Cmds.AlignLeft, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::Left));
+    Bindings->MapAction(Cmds.AlignRight, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::Right));
+    Bindings->MapAction(Cmds.AlignTop, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::Top));
+    Bindings->MapAction(Cmds.AlignBottom, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::Bottom));
+    Bindings->MapAction(Cmds.AlignCenterX, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::CenterX));
+    Bindings->MapAction(Cmds.AlignCenterY, FExecuteAction::CreateStatic(&FTheGraphArranger::AlignActiveSelection, FTheGraphArranger::ETheAlign::CenterY));
+    Bindings->MapAction(Cmds.DistributeHorizontally, FExecuteAction::CreateStatic(&FTheGraphArranger::DistributeActiveSelection, FTheGraphArranger::ETheDistribute::Horizontal));
+    Bindings->MapAction(Cmds.DistributeVertically, FExecuteAction::CreateStatic(&FTheGraphArranger::DistributeActiveSelection, FTheGraphArranger::ETheDistribute::Vertical));
+
     // Context-menu entry — registered once the tool-menu system is ready.
     UToolMenus::RegisterStartupCallback(FSimpleMulticastDelegate::FDelegate::CreateRaw(this, &FTheStylerModule::RegisterMenus));
 
@@ -48,8 +60,18 @@ void FTheStylerModule::ShutdownModule()
 
     if(IMainFrameModule* MainFrame = FModuleManager::GetModulePtr<IMainFrameModule>(TEXT("MainFrame")))
     {
-        MainFrame->GetMainFrameCommandBindings()->UnmapAction(FTheStylerCommands::Get().ArrangeNodes);
-        MainFrame->GetMainFrameCommandBindings()->UnmapAction(FTheStylerCommands::Get().FormatNode);
+        const auto& Cmds = FTheStylerCommands::Get();
+        const auto Bindings = MainFrame->GetMainFrameCommandBindings();
+        Bindings->UnmapAction(Cmds.ArrangeNodes);
+        Bindings->UnmapAction(Cmds.FormatNode);
+        Bindings->UnmapAction(Cmds.AlignLeft);
+        Bindings->UnmapAction(Cmds.AlignRight);
+        Bindings->UnmapAction(Cmds.AlignTop);
+        Bindings->UnmapAction(Cmds.AlignBottom);
+        Bindings->UnmapAction(Cmds.AlignCenterX);
+        Bindings->UnmapAction(Cmds.AlignCenterY);
+        Bindings->UnmapAction(Cmds.DistributeHorizontally);
+        Bindings->UnmapAction(Cmds.DistributeVertically);
     }
 
     FTheStylerCommands::Unregister();
@@ -70,6 +92,27 @@ void FTheStylerModule::RegisterMenus()
         FToolMenuSection& Section = ContextMenu->AddSection(TEXT("TheStyler"), LOCTEXT("SectionLabel", "The Styler"));
         Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().ArrangeNodes, CommandList);
         Section.AddMenuEntryWithCommandList(FTheStylerCommands::Get().FormatNode, CommandList);
+
+        // Align / Distribute submenu — one entry per edge/center and per axis.
+        Section.AddSubMenu(TEXT("TheAlignDistribute"),
+            LOCTEXT("AlignSubmenuLabel", "Align / Distribute"),
+            LOCTEXT("AlignSubmenuTooltip", "Align or evenly space the selected nodes."),
+            FNewToolMenuDelegate::CreateLambda(
+                [CommandList](UToolMenu* SubMenu)
+                {
+                    const auto& Cmds = FTheStylerCommands::Get();
+                    FToolMenuSection& AlignSection = SubMenu->AddSection(TEXT("Align"), LOCTEXT("AlignSectionLabel", "Align"));
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignLeft, CommandList);
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignRight, CommandList);
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignTop, CommandList);
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignBottom, CommandList);
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignCenterX, CommandList);
+                    AlignSection.AddMenuEntryWithCommandList(Cmds.AlignCenterY, CommandList);
+
+                    FToolMenuSection& DistSection = SubMenu->AddSection(TEXT("Distribute"), LOCTEXT("DistSectionLabel", "Distribute"));
+                    DistSection.AddMenuEntryWithCommandList(Cmds.DistributeHorizontally, CommandList);
+                    DistSection.AddMenuEntryWithCommandList(Cmds.DistributeVertically, CommandList);
+                }));
     }
 
     // Toolbar button — every asset editor's toolbar inherits from this shared parent, so one entry
