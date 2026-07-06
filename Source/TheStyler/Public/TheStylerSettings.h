@@ -56,6 +56,12 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "The|Wires")
     bool bEnableWireStyling = true;
 
+    /** Extra graph-schema class names (beyond Blueprint/K2, which is always styled) whose exec wires get
+     * the restyle, matched by the schema's exact class name. This project ships dialogue/quest graphs;
+     * a standalone project can clear this list or add its own schemas. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
+    TArray<FString> ExtraWireStylingSchemas = {TEXT("TheDialogueGraphSchema"), TEXT("TheQuestGraphSchema")};
+
     /** How restyled wires are routed (also cycled by the graph-toolbar Wires button). */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
     ETheWireStyle WireStyle = ETheWireStyle::Manhattan;

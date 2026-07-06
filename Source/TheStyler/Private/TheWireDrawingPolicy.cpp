@@ -33,10 +33,10 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
         return nullptr; // styling disabled -> engine default policy for every graph
     }
 
-    // Blueprint (K2) graphs, and our dialogue/quest graphs — their nodes use PC_Exec pins laid out
-    // horizontally, so the same exec-Manhattan path applies. Matched by schema class name to keep
-    // this plugin decoupled from the project's editor module.
-    const bool bTheGraph = Schema && (Schema->GetClass()->GetFName() == TEXT("TheDialogueGraphSchema") || Schema->GetClass()->GetFName() == TEXT("TheQuestGraphSchema"));
+    // Blueprint (K2) graphs are always styled; additional graph schemas (e.g. this project's
+    // dialogue/quest graphs) come from the configurable ExtraWireStylingSchemas list, matched by class
+    // name to keep this plugin decoupled from the project's editor module and portable to other projects.
+    const bool bTheGraph = Schema && GetDefault<UTheStylerSettings>()->ExtraWireStylingSchemas.Contains(Schema->GetClass()->GetName());
     if(Schema && (Schema->IsA(UEdGraphSchema_K2::StaticClass()) || bTheGraph))
     {
         return new FTheWireConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements, InGraphObj);
