@@ -16,6 +16,7 @@ inline constexpr const TCHAR* ContentBrowserMenuName = TEXT("The.ContentBrowserM
 }
 
 struct FTheWireConnectionFactory;
+class FTheFormatOnConnect;
 
 class FTheStylerModule : public IModuleInterface
 {
@@ -28,4 +29,5 @@ private:
     void RegisterContentBrowserMenu();
 
     TSharedPtr<FTheWireConnectionFactory> WireFactory;
+    TUniquePtr<FTheFormatOnConnect> FormatOnConnect;
 };

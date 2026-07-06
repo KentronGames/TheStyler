@@ -47,6 +47,12 @@ public:
     /** Even out the gaps between the active graph's selected nodes along an axis (needs 3+ nodes). */
     static void DistributeActiveSelection(ETheDistribute Axis);
 
+    /** The graph panel the user is currently working in (focus / active tab / active window). */
+    static TSharedPtr<SGraphPanel> GetActiveGraphPanel();
+
+    /** Arrange the wire-connected component(s) containing Seeds in the active graph (format-on-connect). */
+    static void FormatComponentInActivePanel(const TSet<UEdGraphNode*>& Seeds);
+
 private:
     enum class EArrangeScope : uint8
     {
@@ -54,7 +60,7 @@ private:
         ConnectedComponentOfSelection, // only the wire-connected component(s) of the selected node(s)
     };
 
-    static void ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel, EArrangeScope Scope);
+    static void ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel, EArrangeScope Scope, const TSet<UEdGraphNode*>* ExplicitSeeds = nullptr);
 
     /** BFS the wire graph out from Seeds (both directions), collecting every reachable non-comment node. */
     static void GatherConnectedComponent(const TSet<UEdGraphNode*>& Seeds, TSet<UEdGraphNode*>& OutComponent);

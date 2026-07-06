@@ -9,6 +9,7 @@
 #include "ToolMenus.h"
 #include "UObject/UObjectIterator.h"
 
+#include "TheFormatOnConnect.h"
 #include "TheGraphArranger.h"
 #include "TheStylerCommands.h"
 #include "TheStylerSettings.h"
@@ -45,10 +46,20 @@ void FTheStylerModule::StartupModule()
     // Manhattan wire styling for Blueprint graphs.
     WireFactory = MakeShared<FTheWireConnectionFactory>();
     FEdGraphUtilities::RegisterVisualPinConnectionFactory(WireFactory);
+
+    // Optional format-on-connect — no-op until enabled in Project Settings -> Plugins -> The Styler.
+    FormatOnConnect = MakeUnique<FTheFormatOnConnect>();
+    FormatOnConnect->Register();
 }
 
 void FTheStylerModule::ShutdownModule()
 {
+    if(FormatOnConnect.IsValid())
+    {
+        FormatOnConnect->Unregister();
+        FormatOnConnect.Reset();
+    }
+
     if(WireFactory.IsValid())
     {
         FEdGraphUtilities::UnregisterVisualPinConnectionFactory(WireFactory);

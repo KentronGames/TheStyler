@@ -217,6 +217,20 @@ void FTheGraphArranger::FormatActiveSelection()
     ArrangeGraphPanel(FindActiveGraphPanel(), EArrangeScope::ConnectedComponentOfSelection);
 }
 
+TSharedPtr<SGraphPanel> FTheGraphArranger::GetActiveGraphPanel()
+{
+    return FindActiveGraphPanel();
+}
+
+void FTheGraphArranger::FormatComponentInActivePanel(const TSet<UEdGraphNode*>& Seeds)
+{
+    if(Seeds.Num() == 0)
+    {
+        return;
+    }
+    ArrangeGraphPanel(FindActiveGraphPanel(), EArrangeScope::ConnectedComponentOfSelection, &Seeds);
+}
+
 void FTheGraphArranger::ArrangeGraphFromContext(const FToolMenuContext& Context)
 {
     // Prefer the button's own editor (context); fall back to the focused/active graph so a click still
@@ -261,7 +275,7 @@ void FTheGraphArranger::GatherConnectedComponent(const TSet<UEdGraphNode*>& Seed
     }
 }
 
-void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel, EArrangeScope Scope)
+void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPanel, EArrangeScope Scope, const TSet<UEdGraphNode*>* ExplicitSeeds)
 {
     if(!GraphPanel.IsValid())
     {
@@ -291,16 +305,31 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
     if(Scope == EArrangeScope::ConnectedComponentOfSelection)
     {
         TSet<UEdGraphNode*> Seeds;
-        for(UEdGraphNode* GraphNode : Graph->Nodes)
+        if(ExplicitSeeds)
         {
-            if(IsValid(GraphNode) && !GraphNode->IsA<UEdGraphNode_Comment>() && GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
+            // Format-on-connect path: seed from the just-added nodes (must belong to this graph).
+            for(UEdGraphNode* Seed : *ExplicitSeeds)
             {
-                Seeds.Add(GraphNode);
+                if(IsValid(Seed) && !Seed->IsA<UEdGraphNode_Comment>() && Seed->GetGraph() == Graph)
+                {
+                    Seeds.Add(Seed);
+                }
+            }
+        }
+        else
+        {
+            // Format Node path: seed from the current selection.
+            for(UEdGraphNode* GraphNode : Graph->Nodes)
+            {
+                if(IsValid(GraphNode) && !GraphNode->IsA<UEdGraphNode_Comment>() && GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
+                {
+                    Seeds.Add(GraphNode);
+                }
             }
         }
         if(Seeds.Num() == 0)
         {
-            UE_LOG(LogTheStyler, Verbose, TEXT("Format Node: select a node first."));
+            UE_LOG(LogTheStyler, Verbose, TEXT("Format: no seed nodes."));
             return;
         }
         GatherConnectedComponent(Seeds, Component);

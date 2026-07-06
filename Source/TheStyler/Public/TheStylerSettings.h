@@ -120,5 +120,10 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0", ClampMax = "16"))
     int32 NodeOrderingPasses = 4;
 
+    /** When on, adding a node (e.g. dragging off a pin) auto-arranges the wire-connected cluster it joins,
+     * keeping the graph tidy as you build. Opt-in — off by default so node placement isn't surprising. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Arrange")
+    bool bFormatOnNodeAdded = false;
+
 #pragma endregion
 };
