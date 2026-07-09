@@ -5,6 +5,8 @@ public class TheStyler : ModuleRules
 	public TheStyler(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
+		// Zero-warnings policy is compiler-enforced for project code (owner decision 2026-07-10).
+		bWarningsAsErrors = true;
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
