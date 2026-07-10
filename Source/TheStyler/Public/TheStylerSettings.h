@@ -1,3 +1,5 @@
+// (c) 2026 Kentron Cowboys. All rights reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -58,7 +60,11 @@ public:
 
     /** Extra graph-schema class names (beyond Blueprint/K2, which is always styled) whose exec wires get
      * the restyle, matched by the schema's exact class name. This project ships dialogue/quest graphs;
-     * a standalone project can clear this list or add its own schemas. */
+     * a standalone project can clear this list or add its own custom graphs.
+     * Note: only schemas WITHOUT their own connection-drawing policy can be restyled — the engine asks
+     * the schema first and its stock editors (Niagara, Behavior Tree, PCG, Material, MetaSound,
+     * Control Rig) all provide one or are claimed by an earlier engine factory, so listing them here
+     * has no effect (UE 5.8 dispatch order). */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
     TArray<FString> ExtraWireStylingSchemas = {TEXT("TheDialogueGraphSchema"), TEXT("TheQuestGraphSchema")};
 
@@ -83,6 +89,12 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (ClampMin = "0.0", UIMax = "128.0", EditCondition = "bEnableWireStyling"))
     float MinManhattanDistance = 24.0f;
 
+    /** Parallel wires whose vertical corridors land within this distance (graph units) of each other
+     * are nudged apart by the same step so they read as separate lines instead of overlapping into
+     * one. 0 = off. Applies to the Manhattan corridor and the Metro 45 diagonal. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (ClampMin = "0.0", UIMax = "32.0", EditCondition = "bEnableWireStyling"))
+    float WireCorridorSpacing = 8.0f;
+
     /** Paint exec wires a fixed color instead of the pin-type color. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
     bool bOverrideWireColor = false;
@@ -103,6 +115,13 @@ public:
     /** Opacity multiplier applied to the faded (non-connected) wires. Lower = dimmer. */
     UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.05", UIMax = "0.8", EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
     float FocusDimOpacity = 0.15f;
+
+    /** Settings classes (exact class names) whose bDimUnselectedNodes flag the toolbar Focus toggle
+     * flips in sync with this plugin's focus mode. This project ships the dialogue/quest graph
+     * editors; a standalone project clears this list or adds its own editors' settings classes —
+     * the toggle never touches (or persists) a settings class outside this list. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
+    TArray<FString> FocusDimSettingsClasses = {TEXT("TheDialogueEditorSettings"), TEXT("TheQuestEditorSettings")};
 
 #pragma endregion
 

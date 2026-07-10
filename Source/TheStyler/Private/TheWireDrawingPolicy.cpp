@@ -1,3 +1,5 @@
+// (c) 2026 Kentron Cowboys. All rights reserved.
+
 #include "TheWireDrawingPolicy.h"
 
 #include "EdGraph/EdGraphPin.h"
@@ -141,18 +143,40 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         // Metro 45: equal horizontal leads joined by an exact 45-degree diagonal; a link too steep
         // for the diagonal to fit degrades to the Manhattan bend.
         const float DeltaY = FMath::Abs(End.Y - Start.Y);
-        const float MidX = (Start.X + End.X) * 0.5f;
+        float MidX = (Start.X + End.X) * 0.5f;
+
+        // Offset-stacking: parallel wires between two node columns all route their vertical
+        // corridor at the same mid X and overlap into one unreadable line. Bucket corridors by X
+        // this paint; each wire landing in an occupied bucket takes the next slot (0, +1, -1,
+        // +2, ...) and is nudged sideways by WireCorridorSpacing. Clamped so the corridor never
+        // leaves the span between the endpoints.
+        const float CorridorStep = StylerSettings.WireCorridorSpacing * ZoomFactor;
+        float CorridorShift = 0.0f;
+        if(CorridorStep > KINDA_SMALL_NUMBER)
+        {
+            const int32 Bucket = FMath::RoundToInt(MidX / CorridorStep);
+            int32& SlotCounter = CorridorSlots.FindOrAdd(Bucket);
+            const int32 Slot = SlotCounter++;
+            if(Slot > 0)
+            {
+                const int32 Ring = (Slot + 1) / 2;
+                CorridorShift = (Slot % 2 == 1 ? 1.0f : -1.0f) * Ring * CorridorStep;
+            }
+        }
 
         TArray<FVector2f, TInlineAllocator<4>> Points;
         Points.Add(Start);
         if(WireStyle == ETheWireStyle::Metro45 && End.X - Start.X > DeltaY && DeltaY > KINDA_SMALL_NUMBER)
         {
-            const float Lead = (End.X - Start.X - DeltaY) * 0.5f;
+            // The shift slides the diagonal along X; keep both diagonal ends inside the span.
+            const float BaseLead = (End.X - Start.X - DeltaY) * 0.5f;
+            const float Lead = FMath::Clamp(BaseLead + CorridorShift, 0.0f, End.X - Start.X - DeltaY);
             Points.Add(FVector2f(Start.X + Lead, Start.Y));
             Points.Add(FVector2f(Start.X + Lead + DeltaY, End.Y));
         }
         else
         {
+            MidX = FMath::Clamp(MidX + CorridorShift, FMath::Min(Start.X, End.X), FMath::Max(Start.X, End.X));
             Points.Add(FVector2f(MidX, Start.Y));
             Points.Add(FVector2f(MidX, End.Y));
         }

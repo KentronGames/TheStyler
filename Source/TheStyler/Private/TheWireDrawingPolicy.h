@@ -1,3 +1,5 @@
+// (c) 2026 Kentron Cowboys. All rights reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
@@ -35,4 +37,10 @@ private:
 
     float ClosestDistanceSquared = 0.0f;
     FVector2f ClosestPoint = FVector2f::ZeroVector;
+
+    // Offset-stacking of parallel corridors: wires whose vertical segment (Manhattan) or diagonal
+    // (Metro) lands in the same X bucket this paint take successive slots (0, +1, -1, +2, ...) and
+    // are nudged apart by WireCorridorSpacing. The policy lives for exactly one panel paint, so the
+    // map resets every frame; the panel's stable draw order keeps slot assignment flicker-free.
+    TMap<int32, int32> CorridorSlots;
 };

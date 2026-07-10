@@ -1,3 +1,5 @@
+// (c) 2026 Kentron Cowboys. All rights reserved.
+
 #include "TheStylerModule.h"
 
 #include "EdGraphUtilities.h"
@@ -216,11 +218,17 @@ void FTheStylerModule::RegisterMenus()
                 Settings->TryUpdateDefaultConfigFile();
 
                 // Focus is one concept to the user, but node dimming lives in per-editor settings
-                // (the dialogue/quest editors' bDimUnselectedNodes). Flip every such flag in sync,
-                // matched by property name so the plugin stays decoupled from those modules.
+                // (the dialogue/quest editors' bDimUnselectedNodes). Flip the flag in sync — but ONLY
+                // on the classes the user listed in FocusDimSettingsClasses: a bare name-match sweep
+                // across all settings CDOs could silently flip AND persist a third-party project's
+                // flag that merely shares the property name (standalone/Fab safety).
                 for(TObjectIterator<UClass> ClassNdx; ClassNdx; ++ClassNdx)
                 {
                     if(!ClassNdx->IsChildOf(UDeveloperSettings::StaticClass()) || ClassNdx->HasAnyClassFlags(CLASS_Abstract) || *ClassNdx == UTheStylerSettings::StaticClass())
+                    {
+                        continue;
+                    }
+                    if(!Settings->FocusDimSettingsClasses.Contains(ClassNdx->GetName()))
                     {
                         continue;
                     }

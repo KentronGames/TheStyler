@@ -1,3 +1,5 @@
+// (c) 2026 Kentron Cowboys. All rights reserved.
+
 #include "TheFolderColorSync.h"
 
 #include "AssetRegistry/IAssetRegistry.h"
