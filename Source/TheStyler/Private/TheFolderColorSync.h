@@ -4,10 +4,6 @@
 
 #include "CoreMinimal.h"
 
-/**
- * Syncs Content Browser folder colors to/from Config/EditorFolderColors.json (so they travel with
- * the project) and adds a "Save Colors" entry to the "The" dropdown in the Content Browser toolbar.
- */
 class FTheFolderColorSync
 {
 public:
@@ -17,7 +13,6 @@ public:
     static void ApplyStandardFolderColors();
     static void RegisterMenuEntry();
 
-    /** Listen for new folders and paint them their Standard Color as they appear (opt-in setting). */
     static void RegisterAutoColorHandler();
 
 private:

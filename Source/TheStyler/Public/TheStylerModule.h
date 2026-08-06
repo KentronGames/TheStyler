@@ -9,11 +9,6 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTheStyler, Log, All);
 
 namespace TheStyler
 {
-/**
- * UToolMenus name of the "The" dropdown in the Content Browser toolbar — a shared home for The* editor
- * commands. Any module can add entries by calling UToolMenus::ExtendMenu(TheStyler::ContentBrowserMenuName);
- * the menu is decoupled from its extenders, so no code dependency on this plugin is needed.
- */
 inline constexpr const TCHAR* ContentBrowserMenuName = TEXT("The.ContentBrowserMenu");
 }
 

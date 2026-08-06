@@ -15,7 +15,6 @@ public:
     TSharedPtr<FUICommandInfo> ArrangeNodes;
     TSharedPtr<FUICommandInfo> FormatNode;
 
-    // Align the selected nodes to a shared edge/center.
     TSharedPtr<FUICommandInfo> AlignLeft;
     TSharedPtr<FUICommandInfo> AlignRight;
     TSharedPtr<FUICommandInfo> AlignTop;
@@ -23,7 +22,6 @@ public:
     TSharedPtr<FUICommandInfo> AlignCenterX;
     TSharedPtr<FUICommandInfo> AlignCenterY;
 
-    // Even out the gaps between the selected nodes along an axis.
     TSharedPtr<FUICommandInfo> DistributeHorizontally;
     TSharedPtr<FUICommandInfo> DistributeVertically;
 };

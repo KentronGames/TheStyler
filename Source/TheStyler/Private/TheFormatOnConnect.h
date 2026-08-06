@@ -9,11 +9,6 @@ class UEdGraph;
 class UEdGraphNode;
 struct FEdGraphEditAction;
 
-/**
- * Optional "format on connect": while UTheStylerSettings::bFormatOnNodeAdded is on, adding a node to a
- * graph (e.g. dragging off a pin) auto-arranges the wire-connected cluster it joins. Hooks each graph's
- * change delegate as its editor opens; all work is deferred a tick and guarded against self-triggering.
- */
 class FTheFormatOnConnect
 {
 public:

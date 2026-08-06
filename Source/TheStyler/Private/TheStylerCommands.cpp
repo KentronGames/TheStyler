@@ -14,11 +14,9 @@ FTheStylerCommands::FTheStylerCommands() : TCommands<FTheStylerCommands>(TEXT("T
 
 void FTheStylerCommands::RegisterCommands()
 {
-    // (Key, bShift, bCtrl, bAlt, bCmd)
     UI_COMMAND(ArrangeNodes, "Arrange Nodes", "Auto-arrange the current graph's nodes (selected, or all if none selected)", EUserInterfaceActionType::Button, FInputChord(EKeys::Q, true, false, false, false));
     UI_COMMAND(FormatNode, "Format Node", "Auto-arrange only the wire-connected component of the selected node(s)", EUserInterfaceActionType::Button, FInputChord(EKeys::F, true, false, false, false));
 
-    // Align / Distribute — menu-only (no default chords to avoid clashing with editor shortcuts).
     UI_COMMAND(AlignLeft, "Align Left", "Align the selected nodes' left edges", EUserInterfaceActionType::Button, FInputChord());
     UI_COMMAND(AlignRight, "Align Right", "Align the selected nodes' right edges", EUserInterfaceActionType::Button, FInputChord());
     UI_COMMAND(AlignTop, "Align Top", "Align the selected nodes' top edges", EUserInterfaceActionType::Button, FInputChord());

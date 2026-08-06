@@ -7,24 +7,14 @@
 
 #include "TheStylerSettings.generated.h"
 
-/** Routing style for the restyled exec wires. */
 UENUM()
 enum class ETheWireStyle : uint8
 {
-    /** Right-angle elbows with rounded corners. */
     Manhattan,
-    /** Horizontal leads joined by a 45-degree diagonal (metro-map look). */
     Metro45,
-    /** Straight pin-to-pin lines. */
     Straight
 };
 
-/**
- * Editor settings for the TheStyler plugin — Project Settings -> Plugins -> "The Styler".
- * Tunes the exec-wire restyle (Manhattan/Metro/Straight), node auto-arrange spacing (Shift+Q),
- * and the Content Browser folder-color sync. Values are project-shared
- * (Config/DefaultEditor.ini) so the look is reproducible from the repository.
- */
 UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "#The Styler"))
 class THESTYLER_API UTheStylerSettings : public UDeveloperSettings
 {
@@ -33,7 +23,6 @@ class THESTYLER_API UTheStylerSettings : public UDeveloperSettings
 public:
     UTheStylerSettings();
 
-    // This is an editor plugin, so its settings live under Project Settings -> Plugins, not a game category.
     virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
 
     /** Apply saved Content Browser folder colors (Config/EditorFolderColors.json) when the editor starts. */

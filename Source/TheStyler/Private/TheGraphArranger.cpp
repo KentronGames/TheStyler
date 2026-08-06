@@ -26,9 +26,6 @@
 
 namespace
 {
-// Default node extent used when a node's widget size is not available yet (offscreen / just-opened
-// graphs measure as zero). Sized generously — an underestimated width makes adjacent columns TOUCH
-// (the layer gap is width + SpacingX), and the project's dialogue/quest nodes run ~340 units wide.
 constexpr double DefaultNodeWidth = 340.0;
 constexpr double DefaultNodeHeight = 150.0;
 
@@ -36,10 +33,10 @@ struct FArrangeNode
 {
     UEdGraphNode* Graph = nullptr;
     FVector2D Size = FVector2D(DefaultNodeWidth, DefaultNodeHeight);
-    TArray<int32> Preds; // nodes feeding into this one (output -> input)
-    TArray<int32> Succs; // nodes this one feeds into
+    TArray<int32> Preds;
+    TArray<int32> Succs;
     int32 Layer = 0;
-    int32 Order = 0; // position within its layer
+    int32 Order = 0;
     double BaryKey = 0.0;
     double PosX = 0.0;
     double PosY = 0.0;
@@ -51,8 +48,6 @@ struct FSelNode
     FVector2D Size = FVector2D(DefaultNodeWidth, DefaultNodeHeight);
 };
 
-// Selected, non-comment nodes of the panel's graph, each with its on-screen size (or a default when the
-// widget has not been measured yet — offscreen / just-opened graphs report zero).
 TArray<FSelNode> GatherSelectedNodes(const TSharedPtr<SGraphPanel>& Panel)
 {
     TArray<FSelNode> Out;
@@ -114,8 +109,6 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelFromFocus()
         return nullptr;
     }
 
-    // Walk up from the keyboard-focused widget. When the user is working inside a graph (e.g. the
-    // Shift+Q hotkey) this pins down the exact panel and disambiguates between several open graphs.
     auto Widget = FSlateApplication::Get().GetKeyboardFocusedWidget();
     while(Widget.IsValid())
     {
@@ -130,14 +123,11 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelFromFocus()
 
 TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
 {
-    // 1) The graph under keyboard focus — exact when the user is inside a graph.
     if(const auto Focused = FindGraphPanelFromFocus())
     {
         return Focused;
     }
 
-    // 2) The globally active tab's content — covers editors whose graph lives directly in the active
-    //    document tab, e.g. the Blueprint event graph.
     if(const auto ActiveTab = FGlobalTabmanager::Get()->GetActiveTab())
     {
         if(const auto Panel = FindGraphPanelRecursive(ActiveTab->GetContent()))
@@ -146,10 +136,6 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
         }
     }
 
-    // 3) The active top-level window's whole widget tree — covers editors that dock the graph in a
-    //    fixed minor tab GetActiveTab() does not return (the Material editor, our Dialogue editor).
-    //    Only the foreground major tab's content is live in the tree, so this resolves to the visible
-    //    graph rather than a backgrounded one.
     if(FSlateApplication::IsInitialized())
     {
         if(const auto ActiveWindow = FSlateApplication::Get().GetActiveTopLevelWindow())
@@ -163,10 +149,6 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindActiveGraphPanel()
 
 TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMenuContext& Context)
 {
-    // Scope discovery to the asset editor whose toolbar hosts the button: the toolbar context carries
-    // that editor's toolkit. Its owner tab's content spans every docked tab, so the graph is found no
-    // matter which tab role hosts it — a Blueprint document tab, our Dialogue major tab, or the Material
-    // editor's fixed Document tab (the global active-tab lookup only sees the latter two).
     const auto ToolkitContext = Context.FindContext<UAssetEditorToolkitMenuContext>();
     if(!ToolkitContext)
     {
@@ -177,8 +159,6 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMe
     {
         return nullptr;
     }
-    // The toolkit's owner tab spans its docked tabs — covers editors whose graph is a major/panel tab
-    // (Blueprint event graph, our Dialogue graph).
     if(const auto TabManager = Toolkit->GetTabManager())
     {
         if(const auto OwnerTab = TabManager->GetOwnerTab())
@@ -190,8 +170,6 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMe
         }
     }
 
-    // Fallback: the toolkit host's whole widget tree — reaches a graph hosted in a Document tab that the
-    // owner-tab content does not expose (the Material editor lays its graph out this way).
     if(const auto Panel = FindGraphPanelRecursive(Toolkit->GetToolkitHost()->GetParentWidget()))
     {
         return Panel;
@@ -235,8 +213,6 @@ void FTheGraphArranger::FormatComponentInActivePanel(const TSet<UEdGraphNode*>& 
 
 void FTheGraphArranger::ArrangeGraphFromContext(const FToolMenuContext& Context)
 {
-    // Prefer the button's own editor (context); fall back to the focused/active graph so a click still
-    // works in editors whose graph the context lookup can't reach.
     auto Panel = FindGraphPanelInContext(Context);
     if(!Panel.IsValid())
     {
@@ -292,15 +268,11 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         return;
     }
 
-    // Layout tuning is user-configurable (Project Settings -> Plugins -> The Styler).
     const auto& Settings = *GetDefault<UTheStylerSettings>();
-    const double SpacingX = Settings.NodeSpacingX; // horizontal gap between layers (columns)
-    const double SpacingY = Settings.NodeSpacingY; // vertical gap between stacked nodes in a column
+    const double SpacingX = Settings.NodeSpacingX;
+    const double SpacingY = Settings.NodeSpacingY;
     const int32 NumOrderingPasses = Settings.NodeOrderingPasses;
 
-    // Collect the target set. Comment nodes are left untouched in this version.
-    //   SelectedOrAll  : selected nodes, or all if nothing is selected.
-    //   ConnectedComponentOfSelection (Format Node) : the wire-connected component(s) of the selection.
     const bool bHasSelection = GraphPanel->SelectionManager.SelectedNodes.Num() > 0;
 
     TSet<UEdGraphNode*> Component;
@@ -309,7 +281,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         TSet<UEdGraphNode*> Seeds;
         if(ExplicitSeeds)
         {
-            // Format-on-connect path: seed from the just-added nodes (must belong to this graph).
             for(UEdGraphNode* Seed : *ExplicitSeeds)
             {
                 if(IsValid(Seed) && !Seed->IsA<UEdGraphNode_Comment>() && Seed->GetGraph() == Graph)
@@ -320,7 +291,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         }
         else
         {
-            // Format Node path: seed from the current selection.
             for(UEdGraphNode* GraphNode : Graph->Nodes)
             {
                 if(IsValid(GraphNode) && !GraphNode->IsA<UEdGraphNode_Comment>() && GraphPanel->SelectionManager.IsNodeSelected(GraphNode))
@@ -377,7 +347,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         return;
     }
 
-    // Build directed edges from output pins to the input pins they connect to.
     for(int32 SrcNdx = 0; SrcNdx < Nodes.Num(); ++SrcNdx)
     {
         for(UEdGraphPin* Pin : Nodes[SrcNdx].Graph->Pins)
@@ -410,11 +379,8 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         }
     }
 
-    // Layer assignment: longest path from roots, skipping back edges to survive cycles.
-    // Iterative DFS (explicit stack) so depth is heap-bounded — a long node chain must not
-    // overflow the call stack. Node.Layer doubles as the running max and its final value.
     TArray<uint8> State;
-    State.Init(0, Nodes.Num()); // 0 = unvisited, 1 = on stack, 2 = done
+    State.Init(0, Nodes.Num());
 
     struct FLayerFrame
     {
@@ -443,7 +409,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
                 const int32 PredNdx = Preds[Frame.NextPred];
                 if(State[PredNdx] == 0)
                 {
-                    // Descend without advancing — revisit this pred (now done) on the way back up.
                     State[PredNdx] = 1;
                     Stack.Push({PredNdx, 0});
                     bDescended = true;
@@ -453,13 +418,12 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
                 {
                     Nodes[NodeNdx].Layer = FMath::Max(Nodes[NodeNdx].Layer, Nodes[PredNdx].Layer + 1);
                 }
-                // State == 1: back edge — skip.
                 ++Frame.NextPred;
             }
 
             if(bDescended)
             {
-                continue; // Frame reference is now stale after the push; re-fetch next loop.
+                continue;
             }
             State[NodeNdx] = 2;
             Stack.Pop();
@@ -472,7 +436,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         MaxLayer = FMath::Max(MaxLayer, Node.Layer);
     }
 
-    // Group node indices per layer, seeded with their original vertical order for stability.
     TArray<TArray<int32>> Layers;
     Layers.SetNum(MaxLayer + 1);
     for(int32 NodeNdx = 0; NodeNdx < Nodes.Num(); ++NodeNdx)
@@ -494,7 +457,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         }
     }
 
-    // Crossing reduction: barycenter sweeps, alternating direction.
     const auto OrderLayerByNeighbors = [&Nodes](TArray<int32>& Layer, bool bUsePreds)
     {
         for(const int32 NodeNdx : Layer)
@@ -536,7 +498,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         }
     }
 
-    // X per layer (cumulative widths), Y by stacking within a layer and centering the column.
     TArray<double> LayerWidth;
     LayerWidth.Init(0.0, MaxLayer + 1);
     for(const FArrangeNode& Node : Nodes)
@@ -570,7 +531,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         }
     }
 
-    // Anchor the new layout to the original top-left so the graph does not jump on screen.
     double OrigMinX = TNumericLimits<double>::Max();
     double OrigMinY = TNumericLimits<double>::Max();
     double NewMinX = TNumericLimits<double>::Max();
@@ -585,7 +545,6 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
     const double OffsetX = OrigMinX - NewMinX;
     const double OffsetY = OrigMinY - NewMinY;
 
-    // Apply inside a single undoable transaction.
     const FScopedTransaction Transaction(LOCTEXT("ArrangeNodesTransaction", "Arrange Nodes"));
     Graph->Modify();
     for(const FArrangeNode& Node : Nodes)
@@ -690,7 +649,6 @@ void FTheGraphArranger::DistributeActiveSelection(ETheDistribute Axis)
     const bool bHorizontal = Axis == ETheDistribute::Horizontal;
     Selection.Sort([bHorizontal](const FSelNode& A, const FSelNode& B) { return bHorizontal ? A.Node->NodePosX < B.Node->NodePosX : A.Node->NodePosY < B.Node->NodePosY; });
 
-    // Keep the two extreme nodes put and spread the leftover space as equal gaps between the rest.
     const FSelNode& First = Selection[0];
     const FSelNode& Last = Selection.Last();
     const double SpanStart = bHorizontal ? First.Node->NodePosX : First.Node->NodePosY;

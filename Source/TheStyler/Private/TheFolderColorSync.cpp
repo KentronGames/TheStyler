@@ -35,7 +35,6 @@ const TCHAR* const ColorField = TEXT("Color");
 const TCHAR* const PathField = TEXT("Path");
 const TCHAR* const VersionField = TEXT("Version");
 
-// Apply saved colors and add the "Save Colors" menu entry once the editor UI is up.
 FDelayedAutoRegisterHelper FolderColorRegistration(
     EDelayedRegisterRunPhase::EndOfEngineInit,
     []()
@@ -90,8 +89,6 @@ void FTheFolderColorSync::SaveCurrentFolderColors()
 {
     auto FolderColors = LoadEditorConfigFolderColors();
 
-    // Drop colors remembered for folders that no longer exist on disk so the
-    // project file does not accumulate stale entries over time.
     const auto RemovedCount = PruneMissingFolders(FolderColors);
 
     if(WriteProjectFolderColors(FolderColors))
@@ -124,7 +121,6 @@ void FTheFolderColorSync::RainbowCurrentFolder()
         return;
     }
 
-    // Immediate subfolders only — do not recurse into their children.
     TArray<FString> SubPaths;
     AssetRegistry->GetSubPaths(BasePath, SubPaths, /*bRecurse*/ false);
     if(SubPaths.Num() == 0)
@@ -133,13 +129,11 @@ void FTheFolderColorSync::RainbowCurrentFolder()
         return;
     }
 
-    // Stable ordering so each folder keeps the same hue across runs.
     SubPaths.Sort();
 
     const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
     for(int32 FolderNdx = 0; FolderNdx < SubPaths.Num(); ++FolderNdx)
     {
-        // Evenly spaced hues give the most visually distinct spread across the set.
         const float Hue = 360.0f * FolderNdx / SubPaths.Num();
         const FLinearColor Color = FLinearColor(Hue, 0.7f, 0.9f).HSVToLinearRGB();
 
@@ -152,7 +146,6 @@ void FTheFolderColorSync::RainbowCurrentFolder()
 
     GConfig->Flush(false, GEditorPerProjectIni);
 
-    // Persist to the project file exactly like "Save Colors" (it reads back the editor config we just wrote).
     SaveCurrentFolderColors();
 }
 
@@ -172,7 +165,6 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
         return;
     }
 
-    // Every folder under /Game, recursively — each matched by its own leaf name (see FindStandardColorForPath).
     TArray<FString> AllPaths;
     AssetRegistry->GetSubPaths(TEXT("/Game"), AllPaths, /*bRecurse*/ true);
 
@@ -202,13 +194,11 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
 
     GConfig->Flush(false, GEditorPerProjectIni);
 
-    // Persist to the project file exactly like "Save Colors" (it reads back the editor config we just wrote).
     SaveCurrentFolderColors();
 }
 
 bool FTheFolderColorSync::FindStandardColorForPath(const FString& Path, FLinearColor& OutColor)
 {
-    // Match by folder leaf name: an exact rule wins over a "*"-prefixed suffix rule (e.g. "*_Data").
     FString LeafName = Path;
     int32 SlashNdx = INDEX_NONE;
     if(Path.FindLastChar(TEXT('/'), SlashNdx))
@@ -252,8 +242,6 @@ void FTheFolderColorSync::HandlePathAdded(const FString& Path)
         return;
     }
 
-    // Ignore the flood of paths surfaced during the initial asset-registry scan — colour only folders
-    // the user creates once the editor is up and running.
     IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
     if(!AssetRegistry || AssetRegistry->IsLoadingAssets())
     {
@@ -279,8 +267,6 @@ void FTheFolderColorSync::RegisterMenuEntry()
 {
     FToolMenuOwnerScoped OwnerScoped(TEXT("TheStyler"));
 
-    // Add "Save Colors" to the shared "The" dropdown in the Content Browser toolbar (owned by the
-    // TheStyler module). Extending by name keeps this feature decoupled from the button's registration.
     UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(TheStyler::ContentBrowserMenuName);
     if(!Menu)
     {
@@ -367,10 +353,6 @@ int32 FTheFolderColorSync::PruneMissingFolders(TMap<FString, FLinearColor>& Fold
 
 bool FTheFolderColorSync::DoesFolderExistOnDisk(const FString& FolderPath)
 {
-    // Resolve the content-browser folder path (e.g. "/Game/Foo") to an on-disk
-    // directory. Paths that cannot be resolved to a filesystem location
-    // (virtual roots, unmounted mount points) are treated as existing so we
-    // never drop a color we cannot positively verify as stale.
     FString DiskPath;
     if(!FPackageName::TryConvertLongPackageNameToFilename(FolderPath, DiskPath))
     {

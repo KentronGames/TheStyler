@@ -12,7 +12,6 @@
 
 namespace
 {
-// Cubic tangent length factor for an ~circular 90-degree corner.
 const float CornerTangentFactor = 4.0f * (FMath::Sqrt(2.0f) - 1.0f);
 
 bool IsExecPin(const UEdGraphPin* Pin)
@@ -32,18 +31,15 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
 {
     if(!GetDefault<UTheStylerSettings>()->bEnableWireStyling)
     {
-        return nullptr; // styling disabled -> engine default policy for every graph
+        return nullptr;
     }
 
-    // Blueprint (K2) graphs are always styled; additional graph schemas (e.g. this project's
-    // dialogue/quest graphs) come from the configurable ExtraWireStylingSchemas list, matched by class
-    // name to keep this plugin decoupled from the project's editor module and portable to other projects.
     const bool bTheGraph = Schema && GetDefault<UTheStylerSettings>()->ExtraWireStylingSchemas.Contains(Schema->GetClass()->GetName());
     if(Schema && (Schema->IsA(UEdGraphSchema_K2::StaticClass()) || bTheGraph))
     {
         return new FTheWireConnectionDrawingPolicy(InBackLayerID, InFrontLayerID, InZoomFactor, InClippingRect, InDrawElements, InGraphObj);
     }
-    return nullptr; // other graphs fall back to the engine default policy
+    return nullptr;
 }
 
 void FTheWireConnectionDrawingPolicy::DrawStraightWire(int32 LayerId, const FVector2f& A, const FVector2f& B, const FConnectionParams& Params)
@@ -73,12 +69,9 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 {
     const auto& StylerSettings = *GetDefault<UTheStylerSettings>();
 
-    // Fatten every wire a little for readability (data wires included — the base policy draws them).
     FConnectionParams StyledParams = Params;
     StyledParams.WireThickness *= StylerSettings.WireThicknessScale;
 
-    // Focus/Dim: when nodes are selected, fade the wires that don't touch the selection so the selected
-    // node's connections stand out. SelectedGraphNodes is filled by the graph panel each paint.
     float DimFactor = 1.0f;
     if(StylerSettings.bFocusDimOnSelection && SelectedGraphNodes.Num() > 0)
     {
@@ -94,10 +87,6 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
 
-    // Exec wires always get the restyle; data wires (usually many and crossing) only when the user
-    // opts in, and even then they keep their pin-type colour. Backward wires fall back to the spline
-    // for the elbowed styles — a mid-X bend would route back over the source node; straight lines
-    // have no such problem and stay restyled in any direction.
     const bool bRestyled = bExecWire || StylerSettings.bManhattanDataWires;
     const ETheWireStyle WireStyle = StylerSettings.WireStyle;
     if(!bRestyled || (WireStyle != ETheWireStyle::Straight && End.X <= Start.X))
@@ -106,17 +95,12 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         return;
     }
 
-    // Optional fixed exec-wire colour; otherwise keep the pin-type colour.
     if(bExecWire && StylerSettings.bOverrideWireColor)
     {
         StyledParams.WireColor = StylerSettings.WireColor;
-        StyledParams.WireColor.A *= DimFactor; // the override replaced the alpha; re-apply the focus fade
+        StyledParams.WireColor.A *= DimFactor;
     }
 
-    // Outcome pins (subcategory-marked by the project's graph editors: Success/True, Failed/False)
-    // pass their green/red onto the wire — engine exec wires ignore the pin color, so the
-    // inheritance has to be explicit here. Keyed by subcategory to stay decoupled; K2 graphs never
-    // mark pins, so Blueprints are unaffected.
     if(bExecWire && StyledParams.AssociatedPin1)
     {
         const FName SourceSubCategory = StyledParams.AssociatedPin1->PinType.PinSubCategory;
@@ -134,22 +118,13 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
     if(WireStyle == ETheWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
     {
-        // Straight style — or a link too short for an elbow to look good in the other styles.
         DrawStraightWire(LayerId, Start, End, StyledParams);
     }
     else
     {
-        // Elbowed polyline. Manhattan: horizontal -> vertical at the mid X -> horizontal.
-        // Metro 45: equal horizontal leads joined by an exact 45-degree diagonal; a link too steep
-        // for the diagonal to fit degrades to the Manhattan bend.
         const float DeltaY = FMath::Abs(End.Y - Start.Y);
         float MidX = (Start.X + End.X) * 0.5f;
 
-        // Offset-stacking: parallel wires between two node columns all route their vertical
-        // corridor at the same mid X and overlap into one unreadable line. Bucket corridors by X
-        // this paint; each wire landing in an occupied bucket takes the next slot (0, +1, -1,
-        // +2, ...) and is nudged sideways by WireCorridorSpacing. Clamped so the corridor never
-        // leaves the span between the endpoints.
         const float CorridorStep = StylerSettings.WireCorridorSpacing * ZoomFactor;
         float CorridorShift = 0.0f;
         if(CorridorStep > KINDA_SMALL_NUMBER)
@@ -168,7 +143,6 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
         Points.Add(Start);
         if(WireStyle == ETheWireStyle::Metro45 && End.X - Start.X > DeltaY && DeltaY > KINDA_SMALL_NUMBER)
         {
-            // The shift slides the diagonal along X; keep both diagonal ends inside the span.
             const float BaseLead = (End.X - Start.X - DeltaY) * 0.5f;
             const float Lead = FMath::Clamp(BaseLead + CorridorShift, 0.0f, End.X - Start.X - DeltaY);
             Points.Add(FVector2f(Start.X + Lead, Start.Y));
@@ -191,7 +165,6 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
             const FVector2f InDir = (Vertex - Points[Ndx - 1]).GetSafeNormal();
             const FVector2f OutDir = (Points[Ndx + 1] - Vertex).GetSafeNormal();
 
-            // Collinear or degenerate vertex: no corner to round, keep going straight.
             if(InDir.IsNearlyZero() || OutDir.IsNearlyZero() || FVector2f::DistSquared(InDir, OutDir) < KINDA_SMALL_NUMBER)
             {
                 continue;
@@ -208,14 +181,13 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
             const float Tangent = CornerR * CornerTangentFactor;
             FSlateDrawElement::MakeDrawSpaceSpline(DrawElementsList, LayerId, Entry, InDir * Tangent, Exit, OutDir * Tangent, StyledParams.WireThickness, ESlateDrawEffect::None, StyledParams.WireColor);
-            AccumulateClosestPoint(Entry, Exit); // approximate the arc by its chord for hover
+            AccumulateClosestPoint(Entry, Exit);
 
             Cursor = Exit;
         }
         DrawStraightWire(LayerId, Cursor, Points.Last(), StyledParams);
     }
 
-    // Preserve wire hover/selection: report the closest point on the drawn path (mirrors the base policy).
     if(Settings->bTreatSplinesLikePins)
     {
         const float ThresholdSquared = FMath::Square(Settings->SplineHoverTolerance + StyledParams.WireThickness * 0.5f);

@@ -45,7 +45,6 @@ void FTheFormatOnConnect::Unregister()
 
 void FTheFormatOnConnect::OnAssetOpened(UObject*, IAssetEditorInstance*)
 {
-    // The graph panel is not in the widget tree yet on this callback — hook the graph a tick later.
     if(GEditor)
     {
         GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateRaw(this, &FTheFormatOnConnect::HookActiveGraph));
@@ -54,7 +53,6 @@ void FTheFormatOnConnect::OnAssetOpened(UObject*, IAssetEditorInstance*)
 
 void FTheFormatOnConnect::HookActiveGraph()
 {
-    // Drop dead entries so the map doesn't grow across a long editor session.
     for(auto It = HookedGraphs.CreateIterator(); It; ++It)
     {
         if(!It->Key.IsValid())
@@ -79,7 +77,6 @@ void FTheFormatOnConnect::HookActiveGraph()
 
 void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
 {
-    // Ignore changes we cause ourselves, and do nothing unless the opt-in feature is on.
     if(bFormatting || !GetDefault<UTheStylerSettings>()->bFormatOnNodeAdded)
     {
         return;
@@ -89,8 +86,6 @@ void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
         return;
     }
 
-    // Defer: the editor is still placing/connecting the node; arranging inside the notification fights
-    // that. Hold the added nodes weakly and re-check next tick.
     TSet<TWeakObjectPtr<UEdGraphNode>> Added;
     for(const UEdGraphNode* Node : Action.Nodes)
     {
@@ -120,7 +115,6 @@ void FTheFormatOnConnect::FormatDeferred(TSet<TWeakObjectPtr<UEdGraphNode>> Adde
         return;
     }
 
-    // Our arrange calls NotifyGraphChanged; the guard stops that from re-entering this handler.
     TGuardValue<bool> ReentryGuard(bFormatting, true);
     FTheGraphArranger::FormatComponentInActivePanel(Seeds);
 }
