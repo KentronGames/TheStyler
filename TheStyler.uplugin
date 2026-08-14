@@ -4,7 +4,7 @@
 	"VersionName": "1.0",
 	"FriendlyName": "The Styler",
 	"Description": "Graph editor tweaks: auto-arranges nodes with a single command (Shift+Q), and restyles Blueprint graph wires as rounded right-angle (Manhattan) lines.",
-	"Category": "The",
+	"Category": "Editor Tools",
 	"CreatedBy": "Kentron Cowboys",
 	"CanContainContent": false,
 	"Installed": false,

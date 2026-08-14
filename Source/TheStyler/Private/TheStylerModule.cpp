@@ -143,20 +143,20 @@ void FTheStylerModule::RegisterMenus()
                 if(!Settings->bEnableWireStyling)
                 {
                     Settings->bEnableWireStyling = true;
-                    Settings->WireStyle = ETheWireStyle::Manhattan;
+                    Settings->WireStyle = ETheStylerWireStyle::Manhattan;
                 }
-                else if(Settings->WireStyle == ETheWireStyle::Manhattan)
+                else if(Settings->WireStyle == ETheStylerWireStyle::Manhattan)
                 {
-                    Settings->WireStyle = ETheWireStyle::Metro45;
+                    Settings->WireStyle = ETheStylerWireStyle::Metro45;
                 }
-                else if(Settings->WireStyle == ETheWireStyle::Metro45)
+                else if(Settings->WireStyle == ETheStylerWireStyle::Metro45)
                 {
-                    Settings->WireStyle = ETheWireStyle::Straight;
+                    Settings->WireStyle = ETheStylerWireStyle::Straight;
                 }
                 else
                 {
                     Settings->bEnableWireStyling = false;
-                    Settings->WireStyle = ETheWireStyle::Manhattan;
+                    Settings->WireStyle = ETheStylerWireStyle::Manhattan;
                 }
                 Settings->SaveConfig();
             });
@@ -173,9 +173,9 @@ void FTheStylerModule::RegisterMenus()
                 }
                 switch(Settings->WireStyle)
                 {
-                    case ETheWireStyle::Metro45:
+                    case ETheStylerWireStyle::Metro45:
                         return LOCTEXT("WireStyleMetro", "Metro 45");
-                    case ETheWireStyle::Straight:
+                    case ETheStylerWireStyle::Straight:
                         return LOCTEXT("WireStyleStraight", "Straight");
                     default:
                         return LOCTEXT("WireStyleManhattan", "Manhattan");
@@ -243,8 +243,8 @@ void FTheStylerModule::RegisterContentBrowserMenu()
     }
 
     const TSharedRef<SActionButton> TheButton = SNew(SActionButton)
-                                                    .Text(LOCTEXT("TheMenuLabel", "The"))
-                                                    .ToolTipText(LOCTEXT("TheMenuTooltip", "Commands from the The* plugins."))
+                                                    .Text(LOCTEXT("TheMenuLabel", "The Styler"))
+                                                    .ToolTipText(LOCTEXT("TheMenuTooltip", "The Styler — Content Browser folder colour commands."))
                                                     .Icon(FAppStyle::Get().GetBrush("Icons.Toolbar.Settings"))
                                                     .OnGetMenuContent_Lambda([]() { return UToolMenus::Get()->GenerateWidget(TheStyler::ContentBrowserMenuName, FToolMenuContext()); });
 

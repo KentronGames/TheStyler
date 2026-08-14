@@ -9,7 +9,7 @@ DECLARE_LOG_CATEGORY_EXTERN(LogTheStyler, Log, All);
 
 namespace TheStyler
 {
-inline constexpr const TCHAR* ContentBrowserMenuName = TEXT("The.ContentBrowserMenu");
+inline constexpr const TCHAR* ContentBrowserMenuName = TEXT("TheStyler.ContentBrowserMenu");
 }
 
 struct FTheWireConnectionFactory;

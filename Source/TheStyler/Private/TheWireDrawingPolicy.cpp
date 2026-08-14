@@ -88,8 +88,8 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
     const bool bExecWire = IsExecPin(StyledParams.AssociatedPin1) || IsExecPin(StyledParams.AssociatedPin2);
 
     const bool bRestyled = bExecWire || StylerSettings.bManhattanDataWires;
-    const ETheWireStyle WireStyle = StylerSettings.WireStyle;
-    if(!bRestyled || (WireStyle != ETheWireStyle::Straight && End.X <= Start.X))
+    const ETheStylerWireStyle WireStyle = StylerSettings.WireStyle;
+    if(!bRestyled || (WireStyle != ETheStylerWireStyle::Straight && End.X <= Start.X))
     {
         FKismetConnectionDrawingPolicy::DrawConnection(LayerId, Start, End, StyledParams);
         return;
@@ -116,7 +116,7 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
     ClosestDistanceSquared = FLT_MAX;
 
-    if(WireStyle == ETheWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
+    if(WireStyle == ETheStylerWireStyle::Straight || FVector2f::Distance(Start, End) < StylerSettings.MinManhattanDistance * ZoomFactor)
     {
         DrawStraightWire(LayerId, Start, End, StyledParams);
     }
@@ -141,7 +141,7 @@ void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVecto
 
         TArray<FVector2f, TInlineAllocator<4>> Points;
         Points.Add(Start);
-        if(WireStyle == ETheWireStyle::Metro45 && End.X - Start.X > DeltaY && DeltaY > KINDA_SMALL_NUMBER)
+        if(WireStyle == ETheStylerWireStyle::Metro45 && End.X - Start.X > DeltaY && DeltaY > KINDA_SMALL_NUMBER)
         {
             const float BaseLead = (End.X - Start.X - DeltaY) * 0.5f;
             const float Lead = FMath::Clamp(BaseLead + CorridorShift, 0.0f, End.X - Start.X - DeltaY);
