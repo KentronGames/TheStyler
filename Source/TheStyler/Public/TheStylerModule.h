@@ -26,5 +26,5 @@ private:
     void RegisterContentBrowserMenu();
 
     TSharedPtr<FTheWireConnectionFactory> WireFactory;
-    TUniquePtr<FTheFormatOnConnect> FormatOnConnect;
+    TSharedPtr<FTheFormatOnConnect> FormatOnConnect;
 };

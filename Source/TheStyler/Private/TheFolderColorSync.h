@@ -14,10 +14,12 @@ public:
     static void RegisterMenuEntry();
 
     static void RegisterAutoColorHandler();
+    static void Shutdown();
 
 private:
     static void HandlePathAdded(const FString& Path);
     static bool FindStandardColorForPath(const FString& Path, FLinearColor& OutColor);
+    static TArray<FString> GetContentRootsToColor();
     static FString GetFolderColorsFilePath();
     static TMap<FString, FLinearColor> LoadEditorConfigFolderColors();
     static int32 PruneMissingFolders(TMap<FString, FLinearColor>& FolderColors);
@@ -25,4 +27,6 @@ private:
     static bool LoadProjectFolderColors(TMap<FString, FLinearColor>& OutFolderColors);
     static bool WriteProjectFolderColors(const TMap<FString, FLinearColor>& FolderColors);
     static void Notify(const FText& Message, bool bSuccess);
+
+    static FDelegateHandle PathAddedHandle;
 };

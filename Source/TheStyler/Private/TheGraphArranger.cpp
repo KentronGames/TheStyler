@@ -170,6 +170,11 @@ TSharedPtr<SGraphPanel> FTheGraphArranger::FindGraphPanelInContext(const FToolMe
         }
     }
 
+    if(!Toolkit->IsHosted())
+    {
+        return nullptr;
+    }
+
     if(const auto Panel = FindGraphPanelRecursive(Toolkit->GetToolkitHost()->GetParentWidget()))
     {
         return Panel;

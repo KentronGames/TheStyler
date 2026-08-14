@@ -9,8 +9,8 @@
 #include "Styling/AppStyle.h"
 #include "Textures/SlateIcon.h"
 #include "ToolMenus.h"
-#include "UObject/UObjectIterator.h"
 
+#include "TheFolderColorSync.h"
 #include "TheFormatOnConnect.h"
 #include "TheGraphArranger.h"
 #include "TheStylerCommands.h"
@@ -45,12 +45,14 @@ void FTheStylerModule::StartupModule()
     WireFactory = MakeShared<FTheWireConnectionFactory>();
     FEdGraphUtilities::RegisterVisualPinConnectionFactory(WireFactory);
 
-    FormatOnConnect = MakeUnique<FTheFormatOnConnect>();
+    FormatOnConnect = MakeShared<FTheFormatOnConnect>();
     FormatOnConnect->Register();
 }
 
 void FTheStylerModule::ShutdownModule()
 {
+    FTheFolderColorSync::Shutdown();
+
     if(FormatOnConnect.IsValid())
     {
         FormatOnConnect->Unregister();
@@ -137,7 +139,7 @@ void FTheStylerModule::RegisterMenus()
         CycleStyle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
             [](const FToolMenuContext&)
             {
-                const auto Settings = GetMutableDefault<UTheStylerSettings>();
+                const auto Settings = GetMutableDefault<UTheStylerViewSettings>();
                 if(!Settings->bEnableWireStyling)
                 {
                     Settings->bEnableWireStyling = true;
@@ -156,15 +158,15 @@ void FTheStylerModule::RegisterMenus()
                     Settings->bEnableWireStyling = false;
                     Settings->WireStyle = ETheWireStyle::Manhattan;
                 }
-                Settings->TryUpdateDefaultConfigFile();
+                Settings->SaveConfig();
             });
-        CycleStyle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+        CycleStyle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerViewSettings>()->bEnableWireStyling ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
         CycleStyle.IsActionVisibleDelegate = GraphVisible;
 
         const TAttribute<FText> StyleLabel = TAttribute<FText>::CreateLambda(
             []()
             {
-                const auto Settings = GetDefault<UTheStylerSettings>();
+                const auto Settings = GetDefault<UTheStylerViewSettings>();
                 if(!Settings->bEnableWireStyling)
                 {
                     return LOCTEXT("WireStyleOff", "Wires: Off");
@@ -190,30 +192,29 @@ void FTheStylerModule::RegisterMenus()
         FocusToggle.ExecuteAction = FToolMenuExecuteAction::CreateLambda(
             [](const FToolMenuContext&)
             {
-                const auto Settings = GetMutableDefault<UTheStylerSettings>();
+                const auto Settings = GetMutableDefault<UTheStylerViewSettings>();
                 Settings->bFocusDimOnSelection = !Settings->bFocusDimOnSelection;
-                Settings->TryUpdateDefaultConfigFile();
+                Settings->SaveConfig();
 
-                for(TObjectIterator<UClass> ClassNdx; ClassNdx; ++ClassNdx)
+                const auto& SharedSettings = *GetDefault<UTheStylerSettings>();
+                for(const FString& ClassName : SharedSettings.FocusDimSettingsClasses)
                 {
-                    if(!ClassNdx->IsChildOf(UDeveloperSettings::StaticClass()) || ClassNdx->HasAnyClassFlags(CLASS_Abstract) || *ClassNdx == UTheStylerSettings::StaticClass())
+                    UClass* const SettingsClass = FindObject<UClass>(nullptr, *ClassName);
+                    if(!SettingsClass || !SettingsClass->IsChildOf(UDeveloperSettings::StaticClass()) || SettingsClass->HasAnyClassFlags(CLASS_Abstract | CLASS_Deprecated | CLASS_NewerVersionExists))
                     {
                         continue;
                     }
-                    if(!Settings->FocusDimSettingsClasses.Contains(ClassNdx->GetName()))
+                    if(FBoolProperty* const DimProperty = FindFProperty<FBoolProperty>(SettingsClass, TEXT("bDimUnselectedNodes")))
                     {
-                        continue;
-                    }
-                    if(FBoolProperty* const DimProperty = FindFProperty<FBoolProperty>(*ClassNdx, TEXT("bDimUnselectedNodes")))
-                    {
-                        const auto EditorSettings = CastChecked<UDeveloperSettings>(ClassNdx->GetDefaultObject());
-                        DimProperty->SetPropertyValue_InContainer(EditorSettings, Settings->bFocusDimOnSelection);
-                        EditorSettings->TryUpdateDefaultConfigFile();
+                        if(const auto EditorSettings = Cast<UDeveloperSettings>(SettingsClass->GetDefaultObject()))
+                        {
+                            DimProperty->SetPropertyValue_InContainer(EditorSettings, Settings->bFocusDimOnSelection);
+                        }
                     }
                 }
             });
-        FocusToggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bFocusDimOnSelection ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
-        FocusToggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerSettings>()->bEnableWireStyling; });
+        FocusToggle.GetActionCheckState = FToolMenuGetActionCheckState::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerViewSettings>()->bFocusDimOnSelection ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; });
+        FocusToggle.CanExecuteAction = FToolMenuCanExecuteAction::CreateLambda([](const FToolMenuContext&) { return GetDefault<UTheStylerViewSettings>()->bEnableWireStyling; });
         FocusToggle.IsActionVisibleDelegate = GraphVisible;
         Section.AddEntry(FToolMenuEntry::InitToolBarButton(TEXT("TheToggleFocus"),
             FToolUIActionChoice(FocusToggle),

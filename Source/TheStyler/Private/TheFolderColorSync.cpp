@@ -29,6 +29,7 @@
 namespace TheFolderColorSync
 {
 constexpr int32 FileVersion = 1;
+const TCHAR* const MenuOwnerName = TEXT("TheStyler");
 const TCHAR* const PathColorSection = TEXT("PathColor");
 const TCHAR* const ColorsField = TEXT("Colors");
 const TCHAR* const ColorField = TEXT("Color");
@@ -46,6 +47,8 @@ FDelayedAutoRegisterHelper FolderColorRegistration(
     true);
 }
 
+FDelegateHandle FTheFolderColorSync::PathAddedHandle;
+
 void FTheFolderColorSync::ApplySavedFolderColors()
 {
     if(!GetDefault<UTheStylerSettings>()->bEnableFolderColorSync)
@@ -56,6 +59,12 @@ void FTheFolderColorSync::ApplySavedFolderColors()
     TMap<FString, FLinearColor> ProjectFolderColors;
     if(!LoadProjectFolderColors(ProjectFolderColors))
     {
+        return;
+    }
+
+    if(ProjectFolderColors.Num() == 0)
+    {
+        UE_LOG(LogTheStyler, Log, TEXT("Editor folder colors file %s holds no colors — leaving the current colors alone."), *GetFolderColorsFilePath());
         return;
     }
 
@@ -166,7 +175,10 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
     }
 
     TArray<FString> AllPaths;
-    AssetRegistry->GetSubPaths(TEXT("/Game"), AllPaths, /*bRecurse*/ true);
+    for(const auto& Root : GetContentRootsToColor())
+    {
+        AssetRegistry->GetSubPaths(Root, AllPaths, /*bRecurse*/ true);
+    }
 
     const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
     int32 ColoredCount = 0;
@@ -230,7 +242,24 @@ void FTheFolderColorSync::RegisterAutoColorHandler()
 {
     if(IAssetRegistry* const AssetRegistry = IAssetRegistry::Get())
     {
-        AssetRegistry->OnPathAdded().AddStatic(&FTheFolderColorSync::HandlePathAdded);
+        PathAddedHandle = AssetRegistry->OnPathAdded().AddStatic(&FTheFolderColorSync::HandlePathAdded);
+    }
+}
+
+void FTheFolderColorSync::Shutdown()
+{
+    if(PathAddedHandle.IsValid())
+    {
+        if(IAssetRegistry* const AssetRegistry = IAssetRegistry::Get())
+        {
+            AssetRegistry->OnPathAdded().Remove(PathAddedHandle);
+        }
+        PathAddedHandle.Reset();
+    }
+
+    if(UToolMenus::IsToolMenuUIEnabled())
+    {
+        UToolMenus::UnregisterOwner(FToolMenuOwner(TheFolderColorSync::MenuOwnerName));
     }
 }
 
@@ -265,7 +294,7 @@ void FTheFolderColorSync::HandlePathAdded(const FString& Path)
 
 void FTheFolderColorSync::RegisterMenuEntry()
 {
-    FToolMenuOwnerScoped OwnerScoped(TEXT("TheStyler"));
+    FToolMenuOwnerScoped OwnerScoped(TheFolderColorSync::MenuOwnerName);
 
     UToolMenu* Menu = UToolMenus::Get()->ExtendMenu(TheStyler::ContentBrowserMenuName);
     if(!Menu)
@@ -291,9 +320,27 @@ void FTheFolderColorSync::RegisterMenuEntry()
         FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::ApplyStandardFolderColors)));
 }
 
+TArray<FString> FTheFolderColorSync::GetContentRootsToColor()
+{
+    const auto& Configured = GetDefault<UTheStylerSettings>()->ContentRootsToColor;
+    if(Configured.Num() > 0)
+    {
+        return Configured;
+    }
+
+    TArray<FString> Roots;
+    FPackageName::QueryRootContentPaths(Roots);
+    Roots.RemoveAll([](const FString& Root) { return Root.StartsWith(TEXT("/Engine")) || Root.StartsWith(TEXT("/Temp")) || Root.StartsWith(TEXT("/Script")); });
+    for(FString& Root : Roots)
+    {
+        Root.RemoveFromEnd(TEXT("/"));
+    }
+    return Roots;
+}
+
 FString FTheFolderColorSync::GetFolderColorsFilePath()
 {
-    return FPaths::ProjectConfigDir() / TEXT("EditorFolderColors.json");
+    return FPaths::ProjectConfigDir() / TEXT("TheStyler") / TEXT("FolderColors.json");
 }
 
 TMap<FString, FLinearColor> FTheFolderColorSync::LoadEditorConfigFolderColors()
@@ -380,10 +427,18 @@ bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& O
         return false;
     }
 
+    int32 Version = 0;
+    if(!RootObject->TryGetNumberField(TheFolderColorSync::VersionField, Version) || Version != TheFolderColorSync::FileVersion)
+    {
+        UE_LOG(LogTheStyler, Warning, TEXT("Editor folder colors file %s declares version %d, this build reads version %d — leaving the current colors alone."), *GetFolderColorsFilePath(), Version, TheFolderColorSync::FileVersion);
+        return false;
+    }
+
     const TArray<TSharedPtr<FJsonValue>>* ColorValues = nullptr;
     if(!RootObject->TryGetArrayField(TheFolderColorSync::ColorsField, ColorValues))
     {
-        return true;
+        UE_LOG(LogTheStyler, Warning, TEXT("Editor folder colors file %s has no '%s' array — leaving the current colors alone."), *GetFolderColorsFilePath(), TheFolderColorSync::ColorsField);
+        return false;
     }
 
     for(const auto& ColorValue : *ColorValues)
@@ -445,7 +500,21 @@ bool FTheFolderColorSync::WriteProjectFolderColors(const TMap<FString, FLinearCo
         return false;
     }
 
-    return FFileHelper::SaveStringToFile(JsonText, *GetFolderColorsFilePath());
+    const auto TargetPath = GetFolderColorsFilePath();
+    const auto TempPath = TargetPath + TEXT(".tmp");
+
+    if(!FFileHelper::SaveStringToFile(JsonText, *TempPath))
+    {
+        return false;
+    }
+
+    if(!IFileManager::Get().Move(*TargetPath, *TempPath))
+    {
+        IFileManager::Get().Delete(*TempPath, /*RequireExists*/ false);
+        return false;
+    }
+
+    return true;
 }
 
 void FTheFolderColorSync::Notify(const FText& Message, bool bSuccess)

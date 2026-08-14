@@ -9,7 +9,7 @@ class UEdGraph;
 class UEdGraphNode;
 struct FEdGraphEditAction;
 
-class FTheFormatOnConnect
+class FTheFormatOnConnect : public TSharedFromThis<FTheFormatOnConnect>
 {
 public:
     void Register();

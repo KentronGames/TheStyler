@@ -29,7 +29,7 @@ FConnectionDrawingPolicy* FTheWireConnectionFactory::CreateConnectionPolicy(cons
     FSlateWindowElementList& InDrawElements,
     UEdGraph* InGraphObj) const
 {
-    if(!GetDefault<UTheStylerSettings>()->bEnableWireStyling)
+    if(!GetDefault<UTheStylerViewSettings>()->bEnableWireStyling)
     {
         return nullptr;
     }
@@ -67,7 +67,7 @@ void FTheWireConnectionDrawingPolicy::AccumulateClosestPoint(const FVector2f& A,
 
 void FTheWireConnectionDrawingPolicy::DrawConnection(int32 LayerId, const FVector2f& Start, const FVector2f& End, const FConnectionParams& Params)
 {
-    const auto& StylerSettings = *GetDefault<UTheStylerSettings>();
+    const auto& StylerSettings = *GetDefault<UTheStylerViewSettings>();
 
     FConnectionParams StyledParams = Params;
     StyledParams.WireThickness *= StylerSettings.WireThicknessScale;

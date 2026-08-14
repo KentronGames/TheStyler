@@ -47,7 +47,7 @@ void FTheFormatOnConnect::OnAssetOpened(UObject*, IAssetEditorInstance*)
 {
     if(GEditor)
     {
-        GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateRaw(this, &FTheFormatOnConnect::HookActiveGraph));
+        GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FTheFormatOnConnect::HookActiveGraph));
     }
 }
 
@@ -77,7 +77,7 @@ void FTheFormatOnConnect::HookActiveGraph()
 
 void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
 {
-    if(bFormatting || !GetDefault<UTheStylerSettings>()->bFormatOnNodeAdded)
+    if(bFormatting || !GetDefault<UTheStylerViewSettings>()->bFormatOnNodeAdded)
     {
         return;
     }
@@ -96,7 +96,7 @@ void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
     }
     if(Added.Num() > 0 && GEditor)
     {
-        GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateRaw(this, &FTheFormatOnConnect::FormatDeferred, Added));
+        GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FTheFormatOnConnect::FormatDeferred, Added));
     }
 }
 

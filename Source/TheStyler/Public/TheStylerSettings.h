@@ -15,6 +15,10 @@ enum class ETheWireStyle : uint8
     Straight
 };
 
+/**
+ * Project-wide settings a team wants identical in every checkout: which folders get which colour, which
+ * extra graph schemas take part, how the arranger spaces nodes. Stored in the project's DefaultEditor.ini.
+ */
 UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "#The Styler"))
 class THESTYLER_API UTheStylerSettings : public UDeveloperSettings
 {
@@ -25,9 +29,11 @@ public:
 
     virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
 
-    /** Apply saved Content Browser folder colors (Config/EditorFolderColors.json) when the editor starts. */
+#pragma region Folder colors
+
+    /** Apply saved Content Browser folder colors when the editor starts. */
     UPROPERTY(config, EditAnywhere, Category = "The")
-    bool bEnableFolderColorSync = true;
+    bool bEnableFolderColorSync = false;
 
     /**
      * Colors used by The -> Standard Colors, which paints known structural folders project-wide.
@@ -39,23 +45,67 @@ public:
 
     /** Auto-apply the matching Standard Color to a folder the moment it is created (matched by leaf name). */
     UPROPERTY(config, EditAnywhere, Category = "The")
-    bool bAutoColorNewFolders = true;
+    bool bAutoColorNewFolders = false;
+
+    /**
+     * Content roots that Standard Colors walks. Empty = every mounted project root, which covers a project
+     * whose assets live in a content plugin rather than under /Game.
+     */
+    UPROPERTY(config, EditAnywhere, Category = "The")
+    TArray<FString> ContentRootsToColor;
+
+#pragma endregion
+
+#pragma region Graphs
+
+    /** Extra graph-schema class names (beyond Blueprint/K2, which is always styled) whose exec wires get
+     * the restyle, matched by the schema's exact class name. Ships empty; a project adds its own custom
+     * graphs here.
+     * Note: only schemas WITHOUT their own connection-drawing policy can be restyled — the engine asks
+     * the schema first and its stock editors (Niagara, Behavior Tree, PCG, Material, MetaSound,
+     * Control Rig) all provide one or are claimed by an earlier engine factory, so listing them here
+     * has no effect (UE 5.8 dispatch order). */
+    UPROPERTY(config, EditAnywhere, Category = "The|Wires")
+    TArray<FString> ExtraWireStylingSchemas;
+
+    /** Settings classes (exact class names) whose bDimUnselectedNodes flag the toolbar Focus toggle
+     * flips in sync with this plugin's focus mode. Ships empty; a project adds its own graph editors'
+     * settings classes — the toggle never touches a settings class outside this list. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Focus")
+    TArray<FString> FocusDimSettingsClasses;
+
+    /** Horizontal gap (graph units) between columns when arranging nodes (Shift+Q). */
+    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0.0", UIMax = "400.0"))
+    float NodeSpacingX = 100.0f;
+
+    /** Vertical gap (graph units) between stacked nodes within a column. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0.0", UIMax = "200.0"))
+    float NodeSpacingY = 32.0f;
+
+    /** Crossing-reduction sweeps over the layout; higher = tidier but slower on huge graphs. */
+    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0", ClampMax = "16"))
+    int32 NodeOrderingPasses = 4;
+
+#pragma endregion
+};
+
+/**
+ * How graphs LOOK to one person at one machine. Stored per user (EditorPerProjectUserSettings), so the
+ * toolbar toggles do not dirty a source-controlled file or flip the setting under a teammate.
+ */
+UCLASS(config = EditorPerProjectUserSettings, meta = (DisplayName = "#The Styler (View)"))
+class THESTYLER_API UTheStylerViewSettings : public UDeveloperSettings
+{
+    GENERATED_BODY()
+
+public:
+    virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
 
 #pragma region Wires
 
     /** Master switch for the exec-wire restyle. Off = engine default wires. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires")
     bool bEnableWireStyling = true;
-
-    /** Extra graph-schema class names (beyond Blueprint/K2, which is always styled) whose exec wires get
-     * the restyle, matched by the schema's exact class name. This project ships dialogue/quest graphs;
-     * a standalone project can clear this list or add its own custom graphs.
-     * Note: only schemas WITHOUT their own connection-drawing policy can be restyled — the engine asks
-     * the schema first and its stock editors (Niagara, Behavior Tree, PCG, Material, MetaSound,
-     * Control Rig) all provide one or are claimed by an earlier engine factory, so listing them here
-     * has no effect (UE 5.8 dispatch order). */
-    UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
-    TArray<FString> ExtraWireStylingSchemas = {TEXT("TheDialogueGraphSchema"), TEXT("TheQuestGraphSchema")};
 
     /** How restyled wires are routed (also cycled by the graph-toolbar Wires button). */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (EditCondition = "bEnableWireStyling"))
@@ -68,7 +118,7 @@ public:
 
     /** Multiplier on every wire's thickness (data wires included) for readability. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (ClampMin = "0.1", UIMin = "0.5", UIMax = "4.0", EditCondition = "bEnableWireStyling"))
-    float WireThicknessScale = 1.6f;
+    float WireThicknessScale = 1.0f;
 
     /** Rounded-corner radius (graph units) at each right-angle bend. 0 = sharp corners. */
     UPROPERTY(config, EditAnywhere, Category = "The|Wires", meta = (ClampMin = "0.0", UIMax = "48.0", EditCondition = "bEnableWireStyling"))
@@ -105,28 +155,9 @@ public:
     UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (ClampMin = "0.0", ClampMax = "1.0", UIMin = "0.05", UIMax = "0.8", EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
     float FocusDimOpacity = 0.15f;
 
-    /** Settings classes (exact class names) whose bDimUnselectedNodes flag the toolbar Focus toggle
-     * flips in sync with this plugin's focus mode. This project ships the dialogue/quest graph
-     * editors; a standalone project clears this list or adds its own editors' settings classes —
-     * the toggle never touches (or persists) a settings class outside this list. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Focus", meta = (EditCondition = "bEnableWireStyling && bFocusDimOnSelection"))
-    TArray<FString> FocusDimSettingsClasses = {TEXT("TheDialogueEditorSettings"), TEXT("TheQuestEditorSettings")};
-
 #pragma endregion
 
 #pragma region Arrange
-
-    /** Horizontal gap (graph units) between columns when arranging nodes (Shift+Q). */
-    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0.0", UIMax = "400.0"))
-    float NodeSpacingX = 100.0f;
-
-    /** Vertical gap (graph units) between stacked nodes within a column. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0.0", UIMax = "200.0"))
-    float NodeSpacingY = 32.0f;
-
-    /** Crossing-reduction sweeps over the layout; higher = tidier but slower on huge graphs. */
-    UPROPERTY(config, EditAnywhere, Category = "The|Arrange", meta = (ClampMin = "0", ClampMax = "16"))
-    int32 NodeOrderingPasses = 4;
 
     /** When on, adding a node (e.g. dragging off a pin) auto-arranges the wire-connected cluster it joins,
      * keeping the graph tidy as you build. Opt-in — off by default so node placement isn't surprising. */

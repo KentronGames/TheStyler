@@ -5,19 +5,20 @@ public class TheStyler : ModuleRules
 	public TheStyler(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
-		// Zero-warnings policy is compiler-enforced for project code (owner decision 2026-07-10).
-		bWarningsAsErrors = true;
+		// Strict only in its home project: a buyer's toolchain or a newer engine must not turn a warning
+		// into a hard failure of THEIR build over a plugin they cannot edit.
+		bWarningsAsErrors = Target.ProjectFile != null && Target.ProjectFile.GetFileNameWithoutExtension() == "TheGame";
 
 		PublicDependencyModuleNames.AddRange(new string[]
 		{
 			"Core",
+			"CoreUObject",
+			"DeveloperSettings",
 		});
 
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"CoreUObject",
 			"Engine",
-			"DeveloperSettings",
 			"Slate",
 			"SlateCore",
 			"InputCore",
