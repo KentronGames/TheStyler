@@ -29,6 +29,23 @@ public:
 
     virtual FName GetCategoryName() const override { return TEXT("Plugins"); }
 
+#pragma region Content Browser
+
+    /** Label on the plugin's Content Browser toolbar button. Left empty, the button reads "The Styler". */
+    UPROPERTY(config, EditAnywhere, Category = "Styler")
+    FString ToolbarButtonLabel = TEXT("The Styler");
+
+    /**
+     * Content Browser folders kept out of the user's sight — service folders a project neither browses nor
+     * edits by hand (e.g. "/Game/Splash", "/Game/Localization"). Each entry is a long package path; the
+     * deny-list goes up when the editor starts and comes down when the plugin unloads. Ships empty: a
+     * project lists its own, and an empty list hides nothing.
+     */
+    UPROPERTY(config, EditAnywhere, Category = "Styler", meta = (ContentDir, LongPackageName))
+    TArray<FString> HiddenFolders;
+
+#pragma endregion
+
 #pragma region Folder colors
 
     /** Apply saved Content Browser folder colors when the editor starts. */

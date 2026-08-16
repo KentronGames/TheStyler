@@ -11,6 +11,7 @@
 #include "ToolMenus.h"
 
 #include "TheFolderColorSync.h"
+#include "TheFolderVisibility.h"
 #include "TheFormatOnConnect.h"
 #include "TheGraphArranger.h"
 #include "TheStylerCommands.h"
@@ -47,11 +48,14 @@ void FTheStylerModule::StartupModule()
 
     FormatOnConnect = MakeShared<FTheFormatOnConnect>();
     FormatOnConnect->Register();
+
+    FTheFolderVisibility::HideConfiguredFolders();
 }
 
 void FTheStylerModule::ShutdownModule()
 {
     FTheFolderColorSync::Shutdown();
+    FTheFolderVisibility::Shutdown();
 
     if(FormatOnConnect.IsValid())
     {
@@ -242,8 +246,11 @@ void FTheStylerModule::RegisterContentBrowserMenu()
         return;
     }
 
+    const auto& ConfiguredLabel = GetDefault<UTheStylerSettings>()->ToolbarButtonLabel;
+    const FText ButtonLabel = ConfiguredLabel.IsEmpty() ? LOCTEXT("TheMenuLabel", "The Styler") : FText::FromString(ConfiguredLabel);
+
     const TSharedRef<SActionButton> TheButton = SNew(SActionButton)
-                                                    .Text(LOCTEXT("TheMenuLabel", "The Styler"))
+                                                    .Text(ButtonLabel)
                                                     .ToolTipText(LOCTEXT("TheMenuTooltip", "The Styler — Content Browser folder colour commands."))
                                                     .Icon(FAppStyle::Get().GetBrush("Icons.Toolbar.Settings"))
                                                     .OnGetMenuContent_Lambda([]() { return UToolMenus::Get()->GenerateWidget(TheStyler::ContentBrowserMenuName, FToolMenuContext()); });

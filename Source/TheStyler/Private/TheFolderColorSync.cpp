@@ -13,6 +13,7 @@
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/DelayedAutoRegister.h"
 #include "Misc/FileHelper.h"
+#include "Misc/MessageDialog.h"
 #include "Misc/PackageName.h"
 #include "Serialization/JsonReader.h"
 #include "Serialization/JsonSerializer.h"
@@ -209,6 +210,37 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
     SaveCurrentFolderColors();
 }
 
+void FTheFolderColorSync::ClearAllFolderColors()
+{
+    const auto FolderColors = LoadEditorConfigFolderColors();
+    if(FolderColors.Num() == 0)
+    {
+        Notify(LOCTEXT("ClearNoColors", "No folder has a color to remove."), false);
+        return;
+    }
+
+    const auto Question = FText::Format(LOCTEXT("ClearFolderColorsConfirm", "Remove the color from all {0} colored folders and save the emptied list to the project file?"), FText::AsNumber(FolderColors.Num()));
+    if(FMessageDialog::Open(EAppMsgType::YesNo, EAppReturnType::No, Question, LOCTEXT("ClearFolderColorsTitle", "Clear Folder Colors")) != EAppReturnType::Yes)
+    {
+        return;
+    }
+
+    const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+    for(const TPair<FString, FLinearColor>& FolderColor : FolderColors)
+    {
+        AssetViewUtils::SetPathColor(FolderColor.Key, TOptional<FLinearColor>());
+        if(ContentBrowserModule)
+        {
+            ContentBrowserModule->GetOnSetFolderColor().Broadcast(FolderColor.Key);
+        }
+    }
+
+    GConfig->Flush(false, GEditorPerProjectIni);
+    UE_LOG(LogTheStyler, Log, TEXT("Removed the color from %d folders."), FolderColors.Num());
+
+    SaveCurrentFolderColors();
+}
+
 bool FTheFolderColorSync::FindStandardColorForPath(const FString& Path, FLinearColor& OutColor)
 {
     FString LeafName = Path;
@@ -318,6 +350,11 @@ void FTheFolderColorSync::RegisterMenuEntry()
         LOCTEXT("StandardFolderColorsTooltip", "Color known structural folders (Meshes, Materials, *_Data, Textures, FX, ...) project-wide using the colors from Project Settings, and save them."),
         FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("ContentBrowser.AssetTreeFolderClosed")),
         FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::ApplyStandardFolderColors)));
+    Section.AddMenuEntry(TEXT("TheClearFolderColors"),
+        LOCTEXT("ClearFolderColorsLabel", "Clear Colors"),
+        LOCTEXT("ClearFolderColorsTooltip", "Remove the color from every colored folder and save the emptied list to the project file (asks first)."),
+        FSlateIcon(FAppStyle::GetAppStyleSetName(), TEXT("Icons.Delete")),
+        FUIAction(FExecuteAction::CreateStatic(&FTheFolderColorSync::ClearAllFolderColors)));
 }
 
 TArray<FString> FTheFolderColorSync::GetContentRootsToColor()

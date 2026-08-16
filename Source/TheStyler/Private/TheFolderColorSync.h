@@ -11,6 +11,7 @@ public:
     static void SaveCurrentFolderColors();
     static void RainbowCurrentFolder();
     static void ApplyStandardFolderColors();
+    static void ClearAllFolderColors();
     static void RegisterMenuEntry();
 
     static void RegisterAutoColorHandler();
