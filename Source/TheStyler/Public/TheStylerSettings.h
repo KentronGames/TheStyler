@@ -37,9 +37,11 @@ public:
 
     /**
      * Content Browser folders kept out of the user's sight — service folders a project neither browses nor
-     * edits by hand (e.g. "/Game/Splash", "/Game/Localization"). Each entry is a long package path; the
-     * deny-list goes up when the editor starts and comes down when the plugin unloads. Ships empty: a
-     * project lists its own, and an empty list hides nothing.
+     * edits by hand (e.g. "/Game/Splash", "/Game/Localization"). An entry is a long package path; a bare
+     * folder name ("Splash") is read as "/Game/Splash", and an entry under no mounted root is reported in
+     * the log rather than ignored. The deny-list goes up when the editor starts and comes down when the
+     * plugin unloads, so a change here needs a restart. Ships empty: a project lists its own, and an empty
+     * list hides nothing.
      */
     UPROPERTY(config, EditAnywhere, Category = "Styler", meta = (ContentDir, LongPackageName))
     TArray<FString> HiddenFolders;
