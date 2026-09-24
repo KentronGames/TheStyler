@@ -19,7 +19,7 @@ enum class ETheStylerWireStyle : uint8
  * Project-wide settings a team wants identical in every checkout: which folders get which colour, which
  * extra graph schemas take part, how the arranger spaces nodes. Stored in the project's DefaultEditor.ini.
  */
-UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "The Styler"))
+UCLASS(config = Editor, defaultconfig, meta = (DisplayName = "#The Styler"))
 class THESTYLER_API UTheStylerSettings : public UDeveloperSettings
 {
     GENERATED_BODY()
@@ -112,7 +112,7 @@ public:
  * How graphs LOOK to one person at one machine. Stored per user (EditorPerProjectUserSettings), so the
  * toolbar toggles do not dirty a source-controlled file or flip the setting under a teammate.
  */
-UCLASS(config = EditorPerProjectUserSettings, meta = (DisplayName = "The Styler (View)"))
+UCLASS(config = EditorPerProjectUserSettings, meta = (DisplayName = "#The Styler (View)"))
 class THESTYLER_API UTheStylerViewSettings : public UDeveloperSettings
 {
     GENERATED_BODY()
