@@ -73,4 +73,4 @@ toolchain cannot turn a warning into a hard failure of a build you did not write
 
 ## Licence
 
-© 2026 Kentron Cowboys. All rights reserved.
+MIT — © 2026 Kentron Cowboys. The full text is in [`LICENSE`](LICENSE).
