@@ -279,6 +279,17 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
     const int32 NumOrderingPasses = Settings.NodeOrderingPasses;
 
     const bool bHasSelection = GraphPanel->SelectionManager.SelectedNodes.Num() > 0;
+    UE_LOG(LogTheStyler,
+        Verbose,
+        TEXT("Arrange Nodes: graph %s, %d node(s), scope %d, %d selected, explicit seeds %d, spacing %.1f x %.1f, %d ordering pass(es)"),
+        *Graph->GetPathName(),
+        Graph->Nodes.Num(),
+        static_cast<int32>(Scope),
+        GraphPanel->SelectionManager.SelectedNodes.Num(),
+        ExplicitSeeds ? ExplicitSeeds->Num() : -1,
+        SpacingX,
+        SpacingY,
+        NumOrderingPasses);
 
     TSet<UEdGraphNode*> Component;
     if(Scope == EArrangeScope::ConnectedComponentOfSelection)
@@ -310,6 +321,7 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
             return;
         }
         GatherConnectedComponent(Seeds, Component);
+        UE_LOG(LogTheStyler, Verbose, TEXT("Format: %d seed node(s) grow to a connected component of %d"), Seeds.Num(), Component.Num());
     }
 
     TArray<FArrangeNode> Nodes;
@@ -346,6 +358,7 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
         Nodes.Add(MoveTemp(Entry));
     }
 
+    UE_LOG(LogTheStyler, Verbose, TEXT("Arrange Nodes: %d arrangeable node(s) in scope"), Nodes.Num());
     if(Nodes.Num() < 2)
     {
         UE_LOG(LogTheStyler, Verbose, TEXT("Arrange Nodes: fewer than two arrangeable nodes; nothing to do."));
@@ -549,6 +562,7 @@ void FTheGraphArranger::ArrangeGraphPanel(const TSharedPtr<SGraphPanel>& GraphPa
     }
     const double OffsetX = OrigMinX - NewMinX;
     const double OffsetY = OrigMinY - NewMinY;
+    UE_LOG(LogTheStyler, Verbose, TEXT("Arrange Nodes: %d node(s) in %d layer(s), anchored at (%.1f, %.1f), offset (%.1f, %.1f)"), Nodes.Num(), MaxLayer + 1, OrigMinX, OrigMinY, OffsetX, OffsetY);
 
     const FScopedTransaction Transaction(LOCTEXT("ArrangeNodesTransaction", "Arrange Nodes"));
     Graph->Modify();
@@ -599,6 +613,7 @@ void FTheGraphArranger::AlignActiveSelection(ETheAlign Mode)
     }
     const double CenterX = (MinX + MaxRight) * 0.5;
     const double CenterY = (MinY + MaxBottom) * 0.5;
+    UE_LOG(LogTheStyler, Verbose, TEXT("Align: mode %d, %d node(s), bounds (%.1f, %.1f)-(%.1f, %.1f)"), static_cast<int32>(Mode), Selection.Num(), MinX, MinY, MaxRight, MaxBottom);
 
     const FScopedTransaction Transaction(LOCTEXT("AlignNodesTransaction", "Align Nodes"));
     Graph->Modify();
@@ -664,6 +679,7 @@ void FTheGraphArranger::DistributeActiveSelection(ETheDistribute Axis)
         TotalSize += bHorizontal ? Sel.Size.X : Sel.Size.Y;
     }
     const double Gap = (SpanEnd - SpanStart - TotalSize) / (Selection.Num() - 1);
+    UE_LOG(LogTheStyler, Verbose, TEXT("Distribute: horizontal=%d, %d node(s), span %.1f..%.1f, total size %.1f, gap %.1f"), bHorizontal ? 1 : 0, Selection.Num(), SpanStart, SpanEnd, TotalSize, Gap);
 
     const FScopedTransaction Transaction(LOCTEXT("DistributeNodesTransaction", "Distribute Nodes"));
     Graph->Modify();

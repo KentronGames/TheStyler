@@ -52,6 +52,7 @@ FDelegateHandle FTheFolderColorSync::PathAddedHandle;
 
 void FTheFolderColorSync::ApplySavedFolderColors()
 {
+    UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: sync enabled=%d, file %s"), GetDefault<UTheStylerSettings>()->bEnableFolderColorSync ? 1 : 0, *GetFolderColorsFilePath());
     if(!GetDefault<UTheStylerSettings>()->bEnableFolderColorSync)
     {
         return;
@@ -60,6 +61,7 @@ void FTheFolderColorSync::ApplySavedFolderColors()
     TMap<FString, FLinearColor> ProjectFolderColors;
     if(!LoadProjectFolderColors(ProjectFolderColors))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: project file not loaded - nothing applied"));
         return;
     }
 
@@ -71,7 +73,9 @@ void FTheFolderColorSync::ApplySavedFolderColors()
 
     const auto CurrentFolderColors = LoadEditorConfigFolderColors();
     const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
+    UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: %d colour(s) in the project file, %d in the editor config, content browser loaded=%d"), ProjectFolderColors.Num(), CurrentFolderColors.Num(), ContentBrowserModule ? 1 : 0);
 
+    int32 ClearedCount = 0;
     for(const TPair<FString, FLinearColor>& CurrentFolderColor : CurrentFolderColors)
     {
         if(ProjectFolderColors.Contains(CurrentFolderColor.Key))
@@ -79,6 +83,8 @@ void FTheFolderColorSync::ApplySavedFolderColors()
             continue;
         }
 
+        UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: clearing %s (was %s) - not in the project file"), *CurrentFolderColor.Key, *CurrentFolderColor.Value.ToString());
+        ++ClearedCount;
         AssetViewUtils::SetPathColor(CurrentFolderColor.Key, TOptional<FLinearColor>());
         if(ContentBrowserModule)
         {
@@ -88,9 +94,11 @@ void FTheFolderColorSync::ApplySavedFolderColors()
 
     for(const TPair<FString, FLinearColor>& ProjectFolderColor : ProjectFolderColors)
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: %s <- %s"), *ProjectFolderColor.Key, *ProjectFolderColor.Value.ToString());
         AssetViewUtils::SetPathColor(ProjectFolderColor.Key, ProjectFolderColor.Value);
     }
 
+    UE_LOG(LogTheStyler, Verbose, TEXT("ApplySavedFolderColors: applied %d, cleared %d, flushing %s"), ProjectFolderColors.Num(), ClearedCount, *GEditorPerProjectIni);
     GConfig->Flush(false, GEditorPerProjectIni);
     UE_LOG(LogTheStyler, Log, TEXT("Applied %d saved editor folder colors."), ProjectFolderColors.Num());
 }
@@ -98,8 +106,10 @@ void FTheFolderColorSync::ApplySavedFolderColors()
 void FTheFolderColorSync::SaveCurrentFolderColors()
 {
     auto FolderColors = LoadEditorConfigFolderColors();
+    UE_LOG(LogTheStyler, Verbose, TEXT("SaveCurrentFolderColors: %d colour(s) in the editor config"), FolderColors.Num());
 
     const auto RemovedCount = PruneMissingFolders(FolderColors);
+    UE_LOG(LogTheStyler, Verbose, TEXT("SaveCurrentFolderColors: %d pruned, writing %d to %s"), RemovedCount, FolderColors.Num(), *GetFolderColorsFilePath());
 
     if(WriteProjectFolderColors(FolderColors))
     {
@@ -133,6 +143,7 @@ void FTheFolderColorSync::RainbowCurrentFolder()
 
     TArray<FString> SubPaths;
     AssetRegistry->GetSubPaths(BasePath, SubPaths, /*bRecurse*/ false);
+    UE_LOG(LogTheStyler, Verbose, TEXT("RainbowCurrentFolder: %s has %d direct subfolder(s)"), *BasePath, SubPaths.Num());
     if(SubPaths.Num() == 0)
     {
         Notify(LOCTEXT("RainbowNoSubfolders", "The current folder has no subfolders to color."), false);
@@ -146,6 +157,7 @@ void FTheFolderColorSync::RainbowCurrentFolder()
     {
         const float Hue = 360.0f * FolderNdx / SubPaths.Num();
         const FLinearColor Color = FLinearColor(Hue, 0.7f, 0.9f).HSVToLinearRGB();
+        UE_LOG(LogTheStyler, Verbose, TEXT("RainbowCurrentFolder: %s <- hue %.1f %s"), *SubPaths[FolderNdx], Hue, *Color.ToString());
 
         AssetViewUtils::SetPathColor(SubPaths[FolderNdx], TOptional<FLinearColor>(Color));
         if(ContentBrowserModule)
@@ -178,8 +190,11 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
     TArray<FString> AllPaths;
     for(const auto& Root : GetContentRootsToColor())
     {
+        const int32 Before = AllPaths.Num();
         AssetRegistry->GetSubPaths(Root, AllPaths, /*bRecurse*/ true);
+        UE_LOG(LogTheStyler, Verbose, TEXT("ApplyStandardFolderColors: root %s holds %d subfolder(s)"), *Root, AllPaths.Num() - Before);
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("ApplyStandardFolderColors: %d rule(s), %d folder(s) to test"), Rules.Num(), AllPaths.Num());
 
     const auto ContentBrowserModule = FModuleManager::GetModulePtr<FContentBrowserModule>(TEXT("ContentBrowser"));
     int32 ColoredCount = 0;
@@ -191,6 +206,7 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
             continue;
         }
 
+        UE_LOG(LogTheStyler, Verbose, TEXT("ApplyStandardFolderColors: %s <- %s"), *Path, *Color.ToString());
         AssetViewUtils::SetPathColor(Path, TOptional<FLinearColor>(Color));
         if(ContentBrowserModule)
         {
@@ -198,6 +214,7 @@ void FTheFolderColorSync::ApplyStandardFolderColors()
         }
         ++ColoredCount;
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("ApplyStandardFolderColors: coloured %d of %d folder(s)"), ColoredCount, AllPaths.Num());
 
     if(ColoredCount == 0)
     {
@@ -222,6 +239,7 @@ void FTheFolderColorSync::ClearAllFolderColors()
     const auto Question = FText::Format(LOCTEXT("ClearFolderColorsConfirm", "Remove the color from all {0} colored folders and save the emptied list to the project file?"), FText::AsNumber(FolderColors.Num()));
     if(FMessageDialog::Open(EAppMsgType::YesNo, EAppReturnType::No, Question, LOCTEXT("ClearFolderColorsTitle", "Clear Folder Colors")) != EAppReturnType::Yes)
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("ClearAllFolderColors: declined - %d colour(s) kept"), FolderColors.Num());
         return;
     }
 
@@ -306,12 +324,14 @@ void FTheFolderColorSync::HandlePathAdded(const FString& Path)
     IAssetRegistry* const AssetRegistry = IAssetRegistry::Get();
     if(!AssetRegistry || AssetRegistry->IsLoadingAssets())
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("HandlePathAdded: %s skipped - registry present=%d, loading=%d"), *Path, AssetRegistry ? 1 : 0, AssetRegistry && AssetRegistry->IsLoadingAssets() ? 1 : 0);
         return;
     }
 
     FLinearColor Color;
     if(!FindStandardColorForPath(Path, Color))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("HandlePathAdded: %s matches no standard colour rule"), *Path);
         return;
     }
 
@@ -321,7 +341,7 @@ void FTheFolderColorSync::HandlePathAdded(const FString& Path)
         ContentBrowserModule->GetOnSetFolderColor().Broadcast(Path);
     }
     GConfig->Flush(false, GEditorPerProjectIni);
-    UE_LOG(LogTheStyler, Verbose, TEXT("Auto-colored new folder %s."), *Path);
+    UE_LOG(LogTheStyler, Verbose, TEXT("Auto-colored new folder %s with %s."), *Path, *Color.ToString());
 }
 
 void FTheFolderColorSync::RegisterMenuEntry()
@@ -362,6 +382,7 @@ TArray<FString> FTheFolderColorSync::GetContentRootsToColor()
     const auto& Configured = GetDefault<UTheStylerSettings>()->ContentRootsToColor;
     if(Configured.Num() > 0)
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("GetContentRootsToColor: %d configured root(s) [%s]"), Configured.Num(), *FString::Join(Configured, TEXT(", ")));
         return Configured;
     }
 
@@ -372,6 +393,7 @@ TArray<FString> FTheFolderColorSync::GetContentRootsToColor()
     {
         Root.RemoveFromEnd(TEXT("/"));
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("GetContentRootsToColor: none configured, %d mounted root(s) [%s]"), Roots.Num(), *FString::Join(Roots, TEXT(", ")));
     return Roots;
 }
 
@@ -387,9 +409,11 @@ TMap<FString, FLinearColor> FTheFolderColorSync::LoadEditorConfigFolderColors()
     TArray<FString> Section;
     if(!GConfig->GetSection(TheFolderColorSync::PathColorSection, Section, GEditorPerProjectIni))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("LoadEditorConfigFolderColors: no [%s] section in %s"), TheFolderColorSync::PathColorSection, *GEditorPerProjectIni);
         return FolderColors;
     }
 
+    int32 SkippedCount = 0;
     for(auto Entry : Section)
     {
         Entry.TrimStartAndEndInline();
@@ -398,6 +422,7 @@ TMap<FString, FLinearColor> FTheFolderColorSync::LoadEditorConfigFolderColors()
         FString ColorString;
         if(!Entry.Split(TEXT("="), &Path, &ColorString))
         {
+            ++SkippedCount;
             continue;
         }
 
@@ -409,9 +434,21 @@ TMap<FString, FLinearColor> FTheFolderColorSync::LoadEditorConfigFolderColors()
         {
             FolderColors.Add(Path, Color);
         }
+        else
+        {
+            ++SkippedCount;
+        }
     }
 
     FolderColors.KeySort([](const FString& Left, const FString& Right) { return Left < Right; });
+    UE_LOG(LogTheStyler,
+        Verbose,
+        TEXT("LoadEditorConfigFolderColors: [%s] in %s - %d entr(ies), %d colour(s) kept, %d skipped (unparsable or default)"),
+        TheFolderColorSync::PathColorSection,
+        *GEditorPerProjectIni,
+        Section.Num(),
+        FolderColors.Num(),
+        SkippedCount);
     return FolderColors;
 }
 
@@ -440,10 +477,13 @@ bool FTheFolderColorSync::DoesFolderExistOnDisk(const FString& FolderPath)
     FString DiskPath;
     if(!FPackageName::TryConvertLongPackageNameToFilename(FolderPath, DiskPath))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("DoesFolderExistOnDisk: %s has no disk mapping - kept as existing"), *FolderPath);
         return true;
     }
 
-    return IFileManager::Get().DirectoryExists(*DiskPath);
+    const bool bExists = IFileManager::Get().DirectoryExists(*DiskPath);
+    UE_LOG(LogTheStyler, Verbose, TEXT("DoesFolderExistOnDisk: %s -> %s exists=%d"), *FolderPath, *DiskPath, bExists ? 1 : 0);
+    return bExists;
 }
 
 bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& OutFolderColors)
@@ -453,8 +493,10 @@ bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& O
     FString JsonText;
     if(!FFileHelper::LoadFileToString(JsonText, *GetFolderColorsFilePath()))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("LoadProjectFolderColors: cannot read %s (full %s)"), *GetFolderColorsFilePath(), *FPaths::ConvertRelativePathToFull(GetFolderColorsFilePath()));
         return false;
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("LoadProjectFolderColors: read %d char(s) from %s"), JsonText.Len(), *GetFolderColorsFilePath());
 
     TSharedPtr<FJsonObject> RootObject;
     const auto Reader = TJsonReaderFactory<>::Create(JsonText);
@@ -478,11 +520,13 @@ bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& O
         return false;
     }
 
+    int32 SkippedCount = 0;
     for(const auto& ColorValue : *ColorValues)
     {
         const auto ColorObject = ColorValue.IsValid() ? ColorValue->AsObject() : nullptr;
         if(!ColorObject.IsValid())
         {
+            ++SkippedCount;
             continue;
         }
 
@@ -490,6 +534,7 @@ bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& O
         FString ColorString;
         if(!ColorObject->TryGetStringField(TheFolderColorSync::PathField, Path) || !ColorObject->TryGetStringField(TheFolderColorSync::ColorField, ColorString))
         {
+            ++SkippedCount;
             continue;
         }
 
@@ -498,8 +543,14 @@ bool FTheFolderColorSync::LoadProjectFolderColors(TMap<FString, FLinearColor>& O
         {
             OutFolderColors.Add(Path, Color);
         }
+        else
+        {
+            ++SkippedCount;
+            UE_LOG(LogTheStyler, Verbose, TEXT("LoadProjectFolderColors: %s colour '%s' unparsable or default, skipped"), *Path, *ColorString);
+        }
     }
 
+    UE_LOG(LogTheStyler, Verbose, TEXT("LoadProjectFolderColors: version %d, %d entr(ies), %d colour(s) kept, %d skipped"), Version, ColorValues->Num(), OutFolderColors.Num(), SkippedCount);
     return true;
 }
 
@@ -534,6 +585,7 @@ bool FTheFolderColorSync::WriteProjectFolderColors(const TMap<FString, FLinearCo
     const auto Writer = TJsonWriterFactory<>::Create(&JsonText);
     if(!FJsonSerializer::Serialize(RootObject, Writer))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("WriteProjectFolderColors: serialising %d colour(s) failed"), ColorValues.Num());
         return false;
     }
 
@@ -542,20 +594,24 @@ bool FTheFolderColorSync::WriteProjectFolderColors(const TMap<FString, FLinearCo
 
     if(!FFileHelper::SaveStringToFile(JsonText, *TempPath))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("WriteProjectFolderColors: cannot write temp file %s (%d char(s))"), *TempPath, JsonText.Len());
         return false;
     }
 
     if(!IFileManager::Get().Move(*TargetPath, *TempPath))
     {
+        UE_LOG(LogTheStyler, Verbose, TEXT("WriteProjectFolderColors: move %s -> %s failed, deleting the temp file"), *TempPath, *TargetPath);
         IFileManager::Get().Delete(*TempPath, /*RequireExists*/ false);
         return false;
     }
 
+    UE_LOG(LogTheStyler, Verbose, TEXT("WriteProjectFolderColors: wrote %d colour(s), %d char(s) to %s"), ColorValues.Num(), JsonText.Len(), *TargetPath);
     return true;
 }
 
 void FTheFolderColorSync::Notify(const FText& Message, bool bSuccess)
 {
+    UE_LOG(LogTheStyler, Verbose, TEXT("Notify: success=%d '%s'"), bSuccess ? 1 : 0, *Message.ToString());
     FNotificationInfo Info(Message);
     Info.ExpireDuration = 3.0f;
     Info.bUseSuccessFailIcons = true;

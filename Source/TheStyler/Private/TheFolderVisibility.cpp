@@ -56,6 +56,7 @@ void FTheFolderVisibility::HideConfiguredFolders()
             const TSharedPtr<FPathPermissionList> FolderPermissionList = AssetTools.GetFolderPermissionList();
             if(!FolderPermissionList)
             {
+                UE_LOG(LogTheStyler, Verbose, TEXT("HideConfiguredFolders: %s not hidden - AssetTools has no folder permission list"), *FolderPath);
                 return;
             }
 
@@ -68,6 +69,7 @@ void FTheFolderVisibility::HideConfiguredFolders()
 
             FolderPermissionList->AddDenyListItem(TheFolderVisibility::DenyListOwner, FolderPath);
             Hidden.Add(FolderPath);
+            UE_LOG(LogTheStyler, Verbose, TEXT("HideConfiguredFolders: deny-listed %s (mount point '%s')"), *FolderPath, *FPackageName::GetPackageMountPoint(FolderPath).ToString());
         });
 
     if(Hidden.Num() > 0)
@@ -95,6 +97,7 @@ void FTheFolderVisibility::Shutdown()
             if(const TSharedPtr<FPathPermissionList> FolderPermissionList = AssetTools.GetFolderPermissionList())
             {
                 FolderPermissionList->RemoveDenyListItem(TheFolderVisibility::DenyListOwner, FolderPath);
+                UE_LOG(LogTheStyler, Verbose, TEXT("FolderVisibility.Shutdown: removed %s from the deny list"), *FolderPath);
             }
         });
 }
@@ -104,7 +107,9 @@ void FTheFolderVisibility::ForEachDenyListEntry(const TFunctionRef<void(const FS
     for(const FString& Configured : GetDefault<UTheStylerSettings>()->HiddenFolders)
     {
         FString FolderPath;
-        if(TheFolderVisibility::ConformFolderPath(Configured, FolderPath))
+        const bool bConformed = TheFolderVisibility::ConformFolderPath(Configured, FolderPath);
+        UE_LOG(LogTheStyler, Verbose, TEXT("HiddenFolders entry '%s' -> '%s' (usable=%d)"), *Configured, *FolderPath, bConformed ? 1 : 0);
+        if(bConformed)
         {
             Visitor(FolderPath);
         }

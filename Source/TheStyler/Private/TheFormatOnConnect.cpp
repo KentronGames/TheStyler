@@ -10,6 +10,7 @@
 #include "TimerManager.h"
 
 #include "TheGraphArranger.h"
+#include "TheStylerModule.h"
 #include "TheStylerSettings.h"
 
 void FTheFormatOnConnect::Register()
@@ -73,6 +74,7 @@ void FTheFormatOnConnect::HookActiveGraph()
     }
     const FDelegateHandle Handle = Graph->AddOnGraphChangedHandler(FOnGraphChanged::FDelegate::CreateRaw(this, &FTheFormatOnConnect::OnGraphChanged));
     HookedGraphs.Add(Graph, Handle);
+    UE_LOG(LogTheStyler, Verbose, TEXT("FormatOnConnect: hooked graph %s, %d graph(s) hooked"), *Graph->GetPathName(), HookedGraphs.Num());
 }
 
 void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
@@ -94,6 +96,7 @@ void FTheFormatOnConnect::OnGraphChanged(const FEdGraphEditAction& Action)
             Added.Add(const_cast<UEdGraphNode*>(Node));
         }
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("FormatOnConnect: graph action 0x%x added %d node(s), %d valid - formatting next tick"), static_cast<uint32>(Action.Action), Action.Nodes.Num(), Added.Num());
     if(Added.Num() > 0 && GEditor)
     {
         GEditor->GetTimerManager()->SetTimerForNextTick(FTimerDelegate::CreateSP(this, &FTheFormatOnConnect::FormatDeferred, Added));
@@ -110,6 +113,7 @@ void FTheFormatOnConnect::FormatDeferred(TSet<TWeakObjectPtr<UEdGraphNode>> Adde
             Seeds.Add(Node);
         }
     }
+    UE_LOG(LogTheStyler, Verbose, TEXT("FormatOnConnect: %d of %d added node(s) still alive"), Seeds.Num(), AddedNodes.Num());
     if(Seeds.Num() == 0)
     {
         return;

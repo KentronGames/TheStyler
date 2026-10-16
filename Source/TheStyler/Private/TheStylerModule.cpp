@@ -4,6 +4,7 @@
 
 #include "EdGraphUtilities.h"
 #include "Framework/Commands/UICommandList.h"
+#include "HAL/IConsoleManager.h"
 #include "Interfaces/IMainFrameModule.h"
 #include "SActionButton.h"
 #include "Styling/AppStyle.h"
@@ -21,6 +22,11 @@
 #define LOCTEXT_NAMESPACE "TheStyler"
 
 DEFINE_LOG_CATEGORY(LogTheStyler);
+
+static TAutoConsoleVariable<bool> CVarTheStylerLog(TEXT("the.styler.log"),
+    false,
+    TEXT("Log the numbers of every TheStyler operation: folder colours read, applied, saved and pruned (with file paths and counts), hidden folders, graph arrange and format passes. Off by default; 1 raises LogTheStyler to Verbose."),
+    FConsoleVariableDelegate::CreateLambda([](IConsoleVariable* Var) { LogTheStyler.SetVerbosity(Var->GetBool() ? ELogVerbosity::Verbose : ELogVerbosity::Log); }));
 
 void FTheStylerModule::StartupModule()
 {
